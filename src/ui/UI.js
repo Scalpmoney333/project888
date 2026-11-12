@@ -1,6 +1,6 @@
 // DOM user interface: menus, settings, HUD readouts and the HUD layout editor.
 
-import { settings, DEFAULTS, DEFAULT_HUD_LAYOUT, applyPreset } from '../core/settings.js';
+import { settings, DEFAULTS, DEFAULT_HUD_LAYOUT, applyPreset, resolveGraphics } from '../core/settings.js';
 import { VEHICLES, TUNING_PARAMS } from '../vehicle/specs.js';
 import { MAPS } from '../core/Game.js';
 import { CAMERA_MODES } from '../camera/CameraRig.js';
@@ -46,7 +46,7 @@ export class UI {
     game.on('frame', (v) => this.updateHud(v));
     game.on('hud', (hidden) => this.hud.classList.toggle('hud-off', hidden));
     game.on('drone', (on) => this.flash(on
-      ? 'Drone: drag to look · stick/WASD fly · ▲▼ or R/F altitude · H hide HUD · V exit'
+      ? 'Drone: drag to look · stick/WASD fly · ▲▼ or R/F altitude · FOV± or Z/X zoom · H hide HUD · V exit'
       : 'Back in the car', on ? 3500 : 1200));
     this.showMenu();
   }
@@ -278,6 +278,7 @@ export class UI {
         this.slider('Distance', 'camera.distance', 0.6, 1.8, 0.05, x),
         this.slider('Height', 'camera.height', 0.5, 2, 0.05, x),
         this.slider('Field of view', 'camera.fov', 45, 90, 1, (v) => `${v}°`),
+        this.slider('Drone field of view', 'camera.droneFov', 30, 110, 1, (v) => `${v}°`),
         this.slider('Smoothing', 'camera.smoothing', 0, 1, 0.05, pct),
         this.slider('Sensitivity', 'camera.sensitivity', 0, 1, 0.05, pct),
         this.slider('Rotation strength', 'camera.rotation', 0, 1, 0.05, pct),
@@ -294,7 +295,7 @@ export class UI {
         this.toggle('Show telemetry', 'hud.showTelemetry'),
         this.toggle('Show FPS', 'graphics.showFps'),
       ];
-      case 'graphics': return [
+      case 'graphics': settings.data.graphics.viewDistance ||= resolveGraphics().viewDistance; return [
         this.select('Preset', 'graphics.preset', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']], (v) => applyPreset(v)),
         this.toggle('Shadows', 'graphics.shadows'),
         this.select('Smoke quality', 'graphics.smoke', [['off', 'Off'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]),
@@ -302,6 +303,7 @@ export class UI {
         this.toggle('Skid marks', 'graphics.skidmarks'),
         this.toggle('Exhaust effects', 'graphics.exhaust'),
         this.slider('Rendering resolution', 'graphics.resolution', 0.5, 1.5, 0.05, pct),
+        this.slider('View distance', 'graphics.viewDistance', 250, 1500, 50, (v) => `${v} m`),
         this.toggle('Adaptive resolution', 'graphics.adaptive'),
         h('p', { class: 'hint' }, 'Antialiasing and texture size follow the preset when a map loads.'),
       ];

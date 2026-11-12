@@ -104,6 +104,7 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
   group.updateMatrixWorld(true);
   const meshes = [];
   const colliders = [];
+  const cull = []; // { mesh, center, radius, foliage } for view-distance culling
   group.traverse((o) => {
     if (!o.isMesh) return;
     meshes.push(o);
@@ -111,6 +112,9 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
     o.receiveShadow = true;
     o.matrixAutoUpdate = false;
     if (o.name.startsWith('col_') || o.parent?.name.startsWith('col_')) colliders.push(o);
+    o.geometry.computeBoundingSphere();
+    const s = o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld);
+    cull.push({ mesh: o, center: s.center, radius: s.radius, foliage: o.material.alphaTest > 0 });
   });
 
   // Collision: merge collidable tiles into one world-space geometry with surface ids.
@@ -145,6 +149,8 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
   return {
     id: def.id,
     group,
+    meshes,
+    cull,
     collision: [collision],
     cylinders: [],
     // Display names come from the map definition; positions from the converter output.

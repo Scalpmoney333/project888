@@ -51,7 +51,7 @@
       }
     ],
     "maxTexture": 512,
-    "tile": 600
+    "tile": 250
   },
   "tsukuba_gta": {
     "surfaces": [
@@ -81,7 +81,7 @@
       }
     ],
     "maxTexture": 512,
-    "tile": 400,
+    "tile": 250,
     "heightSplit": 50
   }
 }

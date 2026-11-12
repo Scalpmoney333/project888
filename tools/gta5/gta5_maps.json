@@ -1,0 +1,17 @@
+{
+  "minami": {
+    "source": "Minami Hotfix position",
+    "ymaps": "all",
+    "surfaces": [
+      {"match": "tarmac|roadpark_dark|road", "surface": 0},
+      {"match": "green|grass|trackedge", "surface": 1},
+      {"match": "gravel|sand", "surface": 4}
+    ],
+    "defaultSurface": 2,
+    "foliage": "grass|trackedge",
+    "decals": "line|skid|mark|decal",
+    "thin": [],
+    "maxTexture": 512,
+    "tile": 400
+  }
+}

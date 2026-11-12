@@ -136,8 +136,11 @@ export class CameraRig {
       const k = (close ? 7 : 4.5) * (0.4 + c.sensitivity * 1.2) * (1.4 - c.smoothing);
       this.yaw += wrap(target - this.yaw) * damp(k, dt);
       const desired = _v2.set(-Math.sin(this.yaw) * dist, height, -Math.cos(this.yaw) * dist).add(carPos);
-      // Positional lag gives a sense of inertia; less lag when close.
+      // Positional lag gives a sense of inertia; less lag when close. The camera first moves with
+      // the car so the lag applies to the offset only — otherwise it trails further at speed.
       const pk = (close ? 14 : 9) * (1.3 - c.smoothing);
+      if (this.prevCar && !this.needSnap) this.pos.add(_v3.subVectors(carPos, this.prevCar));
+      (this.prevCar ||= new THREE.Vector3()).copy(carPos);
       this.pos.lerp(desired, this.needSnap ? 1 : damp(pk, dt));
       this.updateLook(dt);
       // Free look orbits the (lagged) chase position around the car.
@@ -164,7 +167,8 @@ export class CameraRig {
       cam.position.x += sx;
       cam.position.y += sy;
       cam.lookAt(this.look);
-      fov += (cine ? 6 : 0) + Math.min(10, speed * 0.12) + c.drift * Math.min(1, Math.abs(beta) / 0.7) * 6;
+      // Only a slight speed FOV widening: a big one makes the car look like it drifts away.
+      fov += (cine ? 6 : 0) + Math.min(3, speed * 0.05) + c.drift * Math.min(1, Math.abs(beta) / 0.7) * 6;
       this.setNear(0.1);
     } else {
       // Car-mounted cameras with a stabilised horizon.

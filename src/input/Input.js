@@ -19,10 +19,11 @@ const LABELS = {
   left: '◀', right: '▶', throttle: 'GAS', brake: 'BRAKE', handbrake: 'E-BRAKE', clutch: 'CLUTCH',
   gearUp: '▲', gearDown: '▼', camera: 'CAM', reset: '⟲', pause: 'Ⅱ',
   drone: 'DRONE', droneUp: '▲', droneDown: '▼', droneExit: 'EXIT', hudToggle: 'HIDE HUD', droneFast: 'FAST',
+  droneFovIn: 'FOV−', droneFovOut: 'FOV+',
 };
 // Controls shown only while driving, and only in drone mode.
 const DRIVE_ONLY = ['wheel', 'left', 'right', 'throttle', 'brake', 'handbrake', 'clutch', 'gearUp', 'gearDown', 'camera', 'reset', 'drone'];
-const DRONE_ONLY = ['droneStick', 'droneUp', 'droneDown', 'droneExit', 'hudToggle', 'droneFast'];
+const DRONE_ONLY = ['droneStick', 'droneUp', 'droneDown', 'droneExit', 'hudToggle', 'droneFast', 'droneFovIn', 'droneFovOut'];
 
 export class Input {
   constructor(container) {
@@ -134,6 +135,8 @@ export class Input {
         case 'clutch': this.raw.clutch = true; break;
         case 'droneStick': this.stick(el, e); break;
         case 'droneUp': this.raw.droneUp = true; break;
+        case 'droneFovIn': this.raw.fovIn = true; break;
+        case 'droneFovOut': this.raw.fovOut = true; break;
         case 'droneDown': this.raw.droneDown = true; break;
         case 'droneFast': this.raw.droneFast = !this.raw.droneFast; el.classList.toggle('on', this.raw.droneFast); break;
         default: this.emit(id);
@@ -183,6 +186,8 @@ export class Input {
         case 'droneStick': this.stick(el, null); break;
         case 'droneUp': this.raw.droneUp = false; break;
         case 'droneDown': this.raw.droneDown = false; break;
+        case 'droneFovIn': this.raw.fovIn = false; break;
+        case 'droneFovOut': this.raw.fovOut = false; break;
       }
     };
     el.addEventListener('pointerup', end);
@@ -269,6 +274,8 @@ export class Input {
       forward: Math.max(-1, Math.min(1, -dead(this.raw.stickY) + kz)),
       up: ky,
       fast: this.raw.droneFast || k.has('ShiftLeft') || k.has('ShiftRight'),
+      // FOV: + widens, − narrows (zoom). Keyboard: Z / X, mouse wheel handled in bindLook.
+      zoom: (this.raw.fovOut || k.has('KeyX') ? 1 : 0) - (this.raw.fovIn || k.has('KeyZ') ? 1 : 0),
     };
   }
 
@@ -280,7 +287,7 @@ export class Input {
 
   /** Bring pedals/steering back to rest (e.g. when pausing). */
   release() {
-    Object.assign(this.raw, { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false });
+    Object.assign(this.raw, { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false, fovIn: false, fovOut: false });
     const knob = this.elements.droneStick?.firstChild;
     if (knob) knob.style.transform = '';
     Object.assign(this.state, { steer: 0, throttle: 0, brake: 0, handbrake: 0, clutch: 0 });
@@ -331,6 +338,11 @@ export class Input {
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
     canvas.addEventListener('lostpointercapture', end);
+    canvas.addEventListener('wheel', (e) => {
+      if (this.mode !== 'drone') return;
+      e.preventDefault();
+      this.onZoom?.(Math.sign(e.deltaY) * 3);
+    }, { passive: false });
   }
 
   // ---------------- per-frame update ----------------
