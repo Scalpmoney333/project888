@@ -19,11 +19,11 @@ const LABELS = {
   left: '◀', right: '▶', throttle: 'GAS', brake: 'BRAKE', handbrake: 'E-BRAKE', clutch: 'CLUTCH',
   gearUp: '▲', gearDown: '▼', camera: 'CAM', reset: '⟲', pause: 'Ⅱ',
   drone: 'DRONE', droneUp: '▲', droneDown: '▼', droneExit: 'EXIT', hudToggle: 'HIDE HUD', droneFast: 'FAST',
-  droneFovIn: 'FOV −', droneFovOut: 'FOV +',
+  droneFovIn: 'FOV −', droneFovOut: 'FOV +', lights: 'LIGHTS',
 };
 
 // Controls shown only while driving / only while flying the drone.
-const DRIVE_CONTROLS = ['wheel', 'left', 'right', 'throttle', 'brake', 'handbrake', 'clutch', 'gearUp', 'gearDown', 'camera', 'reset', 'drone'];
+const DRIVE_CONTROLS = ['wheel', 'left', 'right', 'throttle', 'brake', 'handbrake', 'clutch', 'gearUp', 'gearDown', 'camera', 'reset', 'drone', 'lights'];
 const DRONE_CONTROLS = ['droneStick', 'droneUp', 'droneDown', 'droneExit', 'hudToggle', 'droneFast', 'droneFovIn', 'droneFovOut'];
 
 export class Input {
@@ -32,7 +32,8 @@ export class Input {
     this.state = { steer: 0, throttle: 0, brake: 0, handbrake: 0, clutch: 0 };
     this.raw = { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false, droneFast: false, fovIn: false, fovOut: false };
     this.keys = new Set();
-    this.handlers = { gearUp: [], gearDown: [], camera: [], reset: [], pause: [], drone: [], droneExit: [], hudToggle: [] };
+    this.handlers = { gearUp: [], gearDown: [], camera: [], reset: [], pause: [], drone: [], droneExit: [], hudToggle: [], lights: [] };
+    this.night = false;
     this.hudHidden = false;
     this.onLook = null; // (dx, dy) in radians from dragging on the game view
     this.onLookHeld = null;
@@ -44,7 +45,7 @@ export class Input {
     this.bindKeyboard();
     this.bindLook();
     this.prevPad = {};
-    settings.onChange((path) => { if (path.startsWith('hud') || path.startsWith('driving')) this.layout(); });
+    settings.onChange((path) => { if (path.startsWith('hud') || path.startsWith('driving') || path === 'headlights') this.layout(); });
     addEventListener('resize', () => this.layout());
     this.layout();
   }
@@ -62,6 +63,12 @@ export class Input {
     this.mode = mode;
     this.hudHidden = false;
     this.release();
+    this.layout();
+  }
+
+  /** The LIGHTS button only exists at night. */
+  setNight(night) {
+    this.night = night;
     this.layout();
   }
 
@@ -227,6 +234,7 @@ export class Input {
     const toggle = this.elements.hudToggle;
     toggle.classList.toggle('on', this.hudHidden);
     toggle.firstChild.textContent = this.hudHidden ? 'SHOW HUD' : LABELS.hudToggle;
+    this.elements.lights.classList.toggle('on', !!d.headlights);
     const manual = d.driving.transmission === 'manual';
     const visible = {
       wheel: d.driving.steeringType === 'wheel',
@@ -235,6 +243,7 @@ export class Input {
       gearUp: manual,
       gearDown: manual,
       clutch: manual && d.driving.clutchPedal,
+      lights: this.night,
     };
     const drone = this.mode === 'drone';
     for (const id of Object.keys(this.elements)) {
@@ -308,7 +317,7 @@ export class Input {
       this.keys.add(e.code);
       const map = this.mode === 'drone'
         ? { KeyV: 'droneExit', KeyH: 'hudToggle', Escape: 'pause', KeyP: 'pause' }
-        : { KeyV: 'drone', KeyE: 'gearUp', ShiftRight: 'gearUp', ShiftLeft: 'gearUp', KeyQ: 'gearDown', ControlLeft: 'gearDown', ControlRight: 'gearDown', KeyC: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause' };
+        : { KeyV: 'drone', KeyL: 'lights', KeyE: 'gearUp', ShiftRight: 'gearUp', ShiftLeft: 'gearUp', KeyQ: 'gearDown', ControlLeft: 'gearDown', ControlRight: 'gearDown', KeyC: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause' };
       if (map[e.code]) this.emit(map[e.code]);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     });
