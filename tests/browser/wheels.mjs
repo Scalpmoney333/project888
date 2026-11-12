@@ -1,7 +1,7 @@
 // Inspect wheel rigs: part listing per corner + side/front close-ups with steering applied.
 import puppeteer from 'puppeteer-core';
 
-const car = process.env.CAR || 'chaser';
+const car = process.env.CAR || 'chaser_gta';
 const browser = await puppeteer.launch({
   executablePath: '/usr/local/bin/google-chrome', headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'], protocolTimeout: 600000,

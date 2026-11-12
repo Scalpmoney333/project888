@@ -58,6 +58,26 @@ export const MAPS = [
     light: { hemi: 1.6, sun: 1.5 },
     far: 3000,
   },
+  {
+    id: 'ebisu_kita',
+    name: 'Ebisu North (Kita)',
+    subtitle: 'Drift course from the GTA IV mod by FzC',
+    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.002 },
+    sun: [-0.4, 0.8, 0.35],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 1500,
+  },
+  {
+    id: 'ebisu_minami',
+    name: 'Ebisu Minami',
+    subtitle: 'Drift circuit from the GTA V mod',
+    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.002 },
+    sun: [0.4, 0.8, -0.3],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 1500,
+  },
 ];
 
 export async function loadMap(def, { renderer, quality, onProgress }) {
@@ -104,6 +124,7 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
   group.updateMatrixWorld(true);
   const meshes = [];
   const colliders = [];
+  const foliageMeshes = [];
   group.traverse((o) => {
     if (!o.isMesh) return;
     meshes.push(o);
@@ -111,6 +132,12 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
     o.receiveShadow = true;
     o.matrixAutoUpdate = false;
     if (o.name.startsWith('col_') || o.parent?.name.startsWith('col_')) colliders.push(o);
+    else if (o.material.alphaTest > 0) {
+      // Tree/grass cards: drawn only within a preset-dependent distance (see Game.cullFoliage).
+      o.geometry.computeBoundingSphere();
+      const sphere = o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld);
+      foliageMeshes.push({ mesh: o, center: sphere.center, radius: sphere.radius });
+    }
   });
 
   // Collision: merge collidable tiles into one world-space geometry with surface ids.
@@ -152,7 +179,9 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
     sky: def.sky,
     sun: new THREE.Vector3(...def.sun).normalize(),
     lightIntensity: def.light,
-    far: def.far,
+    // Beyond ~2.2 / density, exponential fog is over 99% opaque: drawing further only costs FPS.
+    far: Math.min(def.far, 2.2 / def.sky.fogDensity),
+    foliage: foliageMeshes,
     dispose() {
       texture?.dispose();
       ground?.dispose();

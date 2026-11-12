@@ -45,7 +45,7 @@ export class UI {
     game.on('frame', (v) => this.updateHud(v));
     game.on('hud', (hidden) => this.hud.classList.toggle('hud-off', hidden));
     game.on('drone', (on) => this.flash(on
-      ? 'Drone: drag to look · stick/WASD fly · ▲▼ or R/F altitude · H hide HUD · V exit'
+      ? 'Drone: drag to look · stick/WASD fly · ▲▼ or R/F altitude · FOV −/+ or -/= zoom · H hide HUD · V exit'
       : 'Back in the car', on ? 3500 : 1200));
     this.showMenu();
   }
@@ -281,6 +281,7 @@ export class UI {
         this.slider('Distance', 'camera.distance', 0.6, 1.8, 0.05, x),
         this.slider('Height', 'camera.height', 0.5, 2, 0.05, x),
         this.slider('Field of view', 'camera.fov', 45, 90, 1, (v) => `${v}°`),
+        this.slider('Drone field of view', 'camera.droneFov', 30, 110, 1, (v) => `${v}°`),
         this.slider('Smoothing', 'camera.smoothing', 0, 1, 0.05, pct),
         this.slider('Sensitivity', 'camera.sensitivity', 0, 1, 0.05, pct),
         this.slider('Rotation strength', 'camera.rotation', 0, 1, 0.05, pct),

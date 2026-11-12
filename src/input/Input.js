@@ -19,17 +19,18 @@ const LABELS = {
   left: '◀', right: '▶', throttle: 'GAS', brake: 'BRAKE', handbrake: 'E-BRAKE', clutch: 'CLUTCH',
   gearUp: '▲', gearDown: '▼', camera: 'CAM', reset: '⟲', pause: 'Ⅱ',
   drone: 'DRONE', droneUp: '▲', droneDown: '▼', droneExit: 'EXIT', hudToggle: 'HIDE HUD', droneFast: 'FAST',
+  droneFovIn: 'FOV −', droneFovOut: 'FOV +',
 };
 
 // Controls shown only while driving / only while flying the drone.
 const DRIVE_CONTROLS = ['wheel', 'left', 'right', 'throttle', 'brake', 'handbrake', 'clutch', 'gearUp', 'gearDown', 'camera', 'reset', 'drone'];
-const DRONE_CONTROLS = ['droneStick', 'droneUp', 'droneDown', 'droneExit', 'hudToggle', 'droneFast'];
+const DRONE_CONTROLS = ['droneStick', 'droneUp', 'droneDown', 'droneExit', 'hudToggle', 'droneFast', 'droneFovIn', 'droneFovOut'];
 
 export class Input {
   constructor(container) {
     this.container = container;
     this.state = { steer: 0, throttle: 0, brake: 0, handbrake: 0, clutch: 0 };
-    this.raw = { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false, droneFast: false };
+    this.raw = { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false, droneFast: false, fovIn: false, fovOut: false };
     this.keys = new Set();
     this.handlers = { gearUp: [], gearDown: [], camera: [], reset: [], pause: [], drone: [], droneExit: [], hudToggle: [] };
     this.hudHidden = false;
@@ -136,6 +137,8 @@ export class Input {
         case 'droneStick': this.stick(el, e); break;
         case 'droneUp': this.raw.droneUp = true; break;
         case 'droneDown': this.raw.droneDown = true; break;
+        case 'droneFovIn': this.raw.fovIn = true; break;
+        case 'droneFovOut': this.raw.fovOut = true; break;
         case 'droneFast':
           this.raw.droneFast = !this.raw.droneFast;
           el.classList.toggle('on', this.raw.droneFast);
@@ -187,6 +190,8 @@ export class Input {
         case 'droneStick': this.stick(el, null); break;
         case 'droneUp': this.raw.droneUp = false; break;
         case 'droneDown': this.raw.droneDown = false; break;
+        case 'droneFovIn': this.raw.fovIn = false; break;
+        case 'droneFovOut': this.raw.fovOut = false; break;
       }
     };
     el.addEventListener('pointerup', end);
@@ -269,10 +274,13 @@ export class Input {
     const kz = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const up = (this.raw.droneUp || k.has('Space') || k.has('KeyR') ? 1 : 0) - (this.raw.droneDown || k.has('KeyF') || k.has('ControlLeft') ? 1 : 0);
     const dead = (v) => (Math.abs(v) < 0.12 ? 0 : v);
+    // Zoom: FOV buttons, or - / = (and [ / ]) on the keyboard. Positive widens the view.
+    const zoom = (this.raw.fovOut || k.has('Equal') || k.has('BracketRight') ? 1 : 0) - (this.raw.fovIn || k.has('Minus') || k.has('BracketLeft') ? 1 : 0);
     return {
       right: Math.max(-1, Math.min(1, dead(this.raw.stickX) + kx)),
       forward: Math.max(-1, Math.min(1, -dead(this.raw.stickY) + kz)),
       up,
+      zoom,
       fast: this.raw.droneFast || k.has('ShiftLeft') || k.has('ShiftRight'),
     };
   }
@@ -285,7 +293,7 @@ export class Input {
 
   /** Bring pedals/steering back to rest (e.g. when pausing). */
   release() {
-    Object.assign(this.raw, { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false });
+    Object.assign(this.raw, { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false, fovIn: false, fovOut: false });
     const knob = this.elements.droneStick?.firstChild;
     if (knob) knob.style.transform = '';
     Object.assign(this.state, { steer: 0, throttle: 0, brake: 0, handbrake: 0, clutch: 0 });

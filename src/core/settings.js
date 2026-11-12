@@ -25,6 +25,8 @@ export const DEFAULT_HUD_LAYOUT = {
   droneFast: { x: 77, y: 80, size: 56 },
   droneExit: { x: 86, y: 8, size: 52 },
   hudToggle: { x: 75, y: 8, size: 52 },
+  droneFovOut: { x: 66, y: 80, size: 56 },
+  droneFovIn: { x: 66, y: 60, size: 56 },
 };
 
 export const DEFAULTS = {
@@ -55,6 +57,7 @@ export const DEFAULTS = {
     distance: 1,
     height: 1,
     fov: 62,
+    droneFov: 70,
     smoothing: 0.5,
     sensitivity: 0.5,
     rotation: 0.55,
@@ -106,6 +109,9 @@ class SettingsStore {
     // Migrations from earlier versions.
     if (this.data.driving.wheelRange === 140) this.data.driving.wheelRange = 720;
     if (['forest', 'oi', 'ashinoko'].includes(this.data.map)) this.data.map = 'nagao';
+    // v1.4 removed the low-detail JZX100s; switch to their detailed versions.
+    const renamed = { chaser: 'chaser_gta', markii: 'markii_gta' };
+    if (renamed[this.data.car]) this.data.car = renamed[this.data.car];
   }
 
   get(path) {
