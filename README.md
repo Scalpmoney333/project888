@@ -29,7 +29,7 @@ locally generated key (`android/debug.keystore`, not committed), so Android asks
 installs from unknown sources. A rebuild on another machine has a different key and must be
 installed after uninstalling the old app.
 
-The single HTML file still works from a phone's storage, but with five cars and four maps it
+The single HTML file still works from a phone's storage, but with seven cars and five maps it
 is large; the APK is the recommended way to play on a phone.
 
 ## Controls
@@ -41,6 +41,7 @@ is large; the APK is the recommended way to play on a phone.
 | E-BRAKE | Space | A / B |
 | ▲ ▼ gears, CLUTCH (manual only) | E / Q, X clutch | RB / LB, X |
 | CAM, ⟲ reset to start, Ⅱ pause | C, R, Esc | Y, Back, Start |
+| DRONE (free camera: stick to fly, ▲ ▼ altitude, FAST, HIDE HUD, EXIT); drag the screen to look around | V, then WASD, R/F, Shift, H, V | — |
 
 All touch controls track their own pointer, so steering, throttle and handbrake work at the
 same time. Every control can be moved and resized (Settings → HUD → Edit), and all settings are
@@ -79,11 +80,11 @@ behaves the same at 30, 60 or 144 FPS.
   model so its wheelbase matches the real car. Wheels modelled with camber or toe (the 240SX
   fronts have 10.7° camber) are straightened so they spin about their real axle. Brake calipers
   steer but do not spin.
-* **Maps** — Nagao, Tsukuba Winter and Ashinoko come from the uploaded Unity map mods
+* **Maps** — Nagao and Tsukuba Winter come from the uploaded Unity map mods
   (`sharedassets18.assets.split0`). Their world meshes carry no scene transforms, so they are
   converted as-is (Unity left-handed Z-up → glTF) by `tools/convert_unity_map.py`, configured
   in `tools/maps.json` (which meshes collide, grip per mesh or from the atlas colour, foliage).
-  Tsukuba and Ashinoko store their scenery objects 3.3 m too high; the `liftFix` setting lowers
+  Tsukuba (and the removed Ashinoko) store their scenery objects 3.3 m too high; the `liftFix` setting lowers
   every object onto the ground while leaving ground patches in place (`tools/maptools.py`).
   The converter tiles the geometry for culling, writes the atlas and finds the longest road to
   place two start points (Uphill/Downhill when the ends differ by more than 80 m).
@@ -112,6 +113,9 @@ behaves the same at 30, 60 or 144 FPS.
 
   The car archive is RAR5; extract it with RARLAB `unrar` (p7zip and unar fail on it).
 
-  Forest Loop Raceway (no track geometry in its file) and Oi Wharf were removed.
+  Nagao Touge (GTA), Tsukuba Touge (GTA) and the detailed Chaser Tourer V were added in v1.3
+  from GTA SA / MTA mods. Their glb/json files were recovered from the v1.3 APK; the converter
+  settings used for them were not recovered. Forest Loop Raceway (no track geometry in its
+  file), Oi Wharf and Ashinoko were removed.
 
 Make sure you have the rights to redistribute the uploaded models and map before publishing.

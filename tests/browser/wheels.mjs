@@ -13,7 +13,7 @@ await page.goto('http://localhost:4173/', { waitUntil: 'load' });
 await page.waitForFunction(() => window.__drift);
 await page.evaluate(async (car) => {
   const { settings, ui } = window.__drift;
-  settings.set('map', 'ashinoko');
+  settings.set('map', 'shomaru');
   settings.set('car', car);
   settings.set('hud.showTelemetry', false);
   await ui.start();
