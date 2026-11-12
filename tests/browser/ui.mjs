@@ -60,10 +60,10 @@ report.options = await page.evaluate(() => {
   return { pedals: s.driving.pedals, vibration: s.hud.vibration, wheelRange: s.driving.wheelRange };
 });
 
-// Start driving on the forest map (MT).
+// Start driving on Shomaru (MT).
 await page.evaluate(async () => {
   const { settings, ui } = window.__drift;
-  settings.set('map', 'ashinoko');
+  settings.set('map', 'shomaru');
   settings.set('car', 'skyline');
   ui.closeSettings();
   await ui.start();

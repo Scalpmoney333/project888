@@ -1,7 +1,7 @@
 // Inspect wheel rigs: part listing per corner + side/front close-ups with steering applied.
 import puppeteer from 'puppeteer-core';
 
-const car = process.env.CAR || 'chaser';
+const car = process.env.CAR || 'chaser_gta';
 const browser = await puppeteer.launch({
   executablePath: '/usr/local/bin/google-chrome', headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'], protocolTimeout: 600000,
@@ -13,7 +13,7 @@ await page.goto('http://localhost:4173/', { waitUntil: 'load' });
 await page.waitForFunction(() => window.__drift);
 await page.evaluate(async (car) => {
   const { settings, ui } = window.__drift;
-  settings.set('map', 'ashinoko');
+  settings.set('map', 'shomaru');
   settings.set('car', car);
   settings.set('hud.showTelemetry', false);
   await ui.start();
@@ -24,7 +24,7 @@ const parts = await page.evaluate(() => {
   return game.model.wheels.map((w) => ({
     name: w.root.name,
     spin: w.spin.children.map((m) => `${m.material.name}:${m.geometry.attributes.position.count}`),
-    steer: w.steer.children.filter((c) => c !== w.spin).map((m) => `${m.material.name}:${m.geometry.attributes.position.count}`),
+    steer: w.camber.children.filter((c) => c !== w.spin).map((m) => `${m.material.name}:${m.geometry.attributes.position.count}`),
     info: { r: +w.info.radius.toFixed(3), w: +w.info.width.toFixed(3), c: w.info.center.toArray().map((x) => +x.toFixed(2)) },
   }));
 });

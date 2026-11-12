@@ -29,16 +29,6 @@ export const MAPS = [
     far: 7000,
   },
   {
-    id: 'ashinoko',
-    name: 'Ashinoko',
-    subtitle: '6 km forest skyline road',
-    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
-    sky: { top: 0x7fa8d8, bottom: 0xd2dde6, fog: 0xc8d4dc, fogDensity: 0.0012 },
-    sun: [-0.4, 0.75, 0.5],
-    light: { hemi: 1.6, sun: 1.5 },
-    far: 6000,
-  },
-  {
     id: 'shomaru',
     name: 'Shomaru Touge',
     subtitle: '5.1 km Initial D pass (GTA SA mod) • Uphill / Downhill',
@@ -47,6 +37,56 @@ export const MAPS = [
     sun: [0.35, 0.8, -0.3],
     light: { hemi: 1.7, sun: 1.4 },
     far: 3500,
+  },
+  {
+    id: 'nagao_gta',
+    name: 'Nagao Touge (GTA)',
+    subtitle: '6.1 km pass from the GTA SA / MTA mod • Uphill / Downhill',
+    spawns: [{ id: 'downhill', name: 'Downhill' }, { id: 'uphill', name: 'Uphill' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.0016 },
+    sun: [-0.45, 0.8, 0.3],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 4000,
+  },
+  {
+    id: 'tsukuba_gta',
+    name: 'Tsukuba Touge (GTA)',
+    subtitle: '3.3 km hairpin pass from the GTA SA / MTA mod • Uphill / Downhill',
+    spawns: [{ id: 'downhill', name: 'Downhill' }, { id: 'uphill', name: 'Uphill' }],
+    sky: { top: 0x82a8d6, bottom: 0xd9e0e4, fog: 0xccd5d9, fogDensity: 0.002 },
+    sun: [0.4, 0.78, 0.35],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 3000,
+  },
+  {
+    id: 'ebisu_kita',
+    name: 'Ebisu North (Kita)',
+    subtitle: 'Ebisu north drift course • GTA IV mod by FzC',
+    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.002 },
+    sun: [-0.4, 0.8, 0.35],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 1500,
+  },
+  {
+    id: 'ebisu_minami',
+    name: 'Ebisu Minami (South)',
+    subtitle: 'Ebisu south drift circuit • GTA V mod',
+    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.002 },
+    sun: [0.4, 0.8, -0.3],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 1500,
+  },
+  {
+    id: 'usui',
+    name: 'Usui Pass',
+    subtitle: 'Initial D hairpin pass • GTA SA / MTA mod • Uphill / Downhill',
+    spawns: [{ id: 'downhill', name: 'Downhill' }, { id: 'uphill', name: 'Uphill' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.0018 },
+    sun: [-0.4, 0.8, 0.35],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 3000,
   },
 ];
 
@@ -94,6 +134,7 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
   group.updateMatrixWorld(true);
   const meshes = [];
   const colliders = [];
+  const foliageMeshes = [];
   group.traverse((o) => {
     if (!o.isMesh) return;
     meshes.push(o);
@@ -101,6 +142,12 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
     o.receiveShadow = true;
     o.matrixAutoUpdate = false;
     if (o.name.startsWith('col_') || o.parent?.name.startsWith('col_')) colliders.push(o);
+    else if (o.material.alphaTest > 0) {
+      // Tree/grass cards: drawn only within a preset-dependent distance (see Game.cullFoliage).
+      o.geometry.computeBoundingSphere();
+      const sphere = o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld);
+      foliageMeshes.push({ mesh: o, center: sphere.center, radius: sphere.radius });
+    }
   });
 
   // Collision: merge collidable tiles into one world-space geometry with surface ids.
@@ -142,7 +189,9 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
     sky: def.sky,
     sun: new THREE.Vector3(...def.sun).normalize(),
     lightIntensity: def.light,
-    far: def.far,
+    // Beyond ~2.2 / density, exponential fog is over 99% opaque: drawing further only costs FPS.
+    far: Math.min(def.far, 2.2 / def.sky.fogDensity),
+    foliage: foliageMeshes,
     dispose() {
       texture?.dispose();
       ground?.dispose();

@@ -1,6 +1,6 @@
 {
   "name": "drift-sim",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "private": true,
   "description": "HTML5 / mobile RWD drift simulator (three.js)",
   "type": "module",

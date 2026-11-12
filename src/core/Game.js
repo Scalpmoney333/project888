@@ -12,7 +12,9 @@ import { Vehicle } from '../physics/Vehicle.js';
 import { getVehicle, buildSpec } from '../vehicle/specs.js';
 import { CarModel } from '../vehicle/CarModel.js';
 import { MAPS, loadMap } from '../world/maps.js';
+import { lightingFor } from '../world/timeOfDay.js';
 import { CameraRig } from '../camera/CameraRig.js';
+import { DroneCamera } from '../camera/DroneCamera.js';
 import { Input } from '../input/Input.js';
 import { AudioEngine } from '../audio/AudioEngine.js';
 import { SmokeSystem, SkidMarks, ExhaustFlames } from '../fx/Effects.js';
@@ -26,6 +28,11 @@ const smooth = (a, b, x) => {
 const _v = new THREE.Vector3();
 const _side = new THREE.Vector3();
 const DUST_BROWN = [0.48, 0.4, 0.3];
+// While the drone flies, the parked car holds its handbrake and the drone gets no input when paused.
+const PARKED = { steer: 0, throttle: 0, brake: 0, handbrake: 1, clutch: 0 };
+const DRONE_IDLE = { forward: 0, right: 0, up: 0, zoom: 0, fast: false };
+// Metres from the camera within which foliage tiles are drawn, per graphics preset.
+const FOLIAGE_RANGE = { low: 220, medium: 380, high: 700 };
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -90,6 +97,15 @@ export class Game {
     this.input.on('gearUp', () => this.shift(1));
     this.input.on('gearDown', () => this.shift(-1));
     this.input.on('pause', () => this.emit('pause'));
+    this.input.on('drone', () => this.setDrone(true));
+    this.input.on('droneExit', () => this.setDrone(false));
+    this.input.on('hudToggle', () => this.setHudHidden(!this.input.hudHidden));
+    this.input.on('lights', () => { if (settings.data.timeOfDay === 'night') settings.set('headlights', !settings.data.headlights); });
+    this.input.onLook = (dx, dy) => {
+      if (this.drone?.active) this.drone.look(dx, -dy);
+      else this.cameraRig?.lookBy(-dx, dy);
+    };
+    this.input.onLookHeld = (held) => this.cameraRig?.setLookHeld(held);
 
     settings.onChange((path) => this.onSettings(path));
     addEventListener('resize', () => this.resize());
@@ -147,7 +163,40 @@ export class Game {
     if (path.startsWith('assists') && this.vehicle) Object.assign(this.vehicle.assists, settings.data.assists);
     if (path.startsWith('driving') && this.vehicle) this.applyDriving();
     if (path.startsWith('tuning') && this.vehicle) this.applyTuning();
-    if (path.startsWith('paint') && this.model) this.model.setPaint(settings.data.paint[this.carDef.id] || null);
+    if (path.startsWith('paint') && this.model) this.model.setPaint(this.paintFor(this.carDef));
+    if (path.startsWith('fitment') && this.vehicle) this.applyTuning();
+    if (path === 'timeOfDay' && this.map) this.applyTimeOfDay();
+    if (path === 'headlights' && this.model) this.applyHeadlights();
+  }
+
+  /** Sky, fog and lights for the current map at the chosen time of day. */
+  applyTimeOfDay() {
+    const time = settings.data.timeOfDay;
+    const L = lightingFor(this.mapDef, time);
+    this.skyUniforms.top.value.copy(L.skyTop);
+    this.skyUniforms.bottom.value.copy(L.skyBottom);
+    this.scene.fog = new THREE.FogExp2(L.fog, L.fogDensity);
+    this.scene.background = L.fog.clone();
+    this.hemi.color.copy(L.hemiSky);
+    this.hemi.groundColor.copy(L.hemiGround);
+    this.hemi.intensity = L.hemi;
+    this.sun.color.copy(L.sunColor);
+    this.sun.intensity = L.sun;
+    this.sunDir = L.sunDir;
+    this.input.setNight(time === 'night');
+    this.applyHeadlights();
+  }
+
+  /** Headlights only exist at night (adding lights recompiles every shader, so not mid-drive). */
+  applyHeadlights() {
+    if (!this.model) return;
+    const night = settings.data.timeOfDay === 'night';
+    this.model.setHeadlights(night, night && settings.data.headlights);
+  }
+
+  /** Player's paint for a car, else the car's default colour, else the model's original paint. */
+  paintFor(def) {
+    return settings.data.paint[def.id] || def.defaultPaint || null;
   }
 
   applyDriving() {
@@ -162,14 +211,20 @@ export class Game {
   }
 
   applyTuning() {
-    const spec = buildSpec(this.carDef, this.tuningFor(this.carDef), this.model.measured);
+    const prevCg = this.vehicle.spec.cgHeight;
+    const spec = buildSpec(this.carDef, this.tuningFor(this.carDef), this.model.measured, settings.data.fitment[this.carDef.id]);
     this.vehicle.applySpec(spec);
     this.vehicle.drivetrain.spec.autoBlip = this.vehicle.transmission === 'auto';
+    // A ride height change moves the CG: shift the car so its wheels stay on the road, which
+    // matters while paused in the Fitment tab (no physics steps run to settle it).
+    const up = _v.set(0, 1, 0).applyQuaternion(this.vehicle.quaternion).multiplyScalar(spec.cgHeight - prevCg);
+    for (const p of [this.vehicle.position, this.vehicle.prevPosition, this.vehicle.renderPosition]) p.add(up);
   }
 
   // ---------------- session ----------------
   async loadSession(carId, mapId, onProgress = () => {}) {
     this.paused = true;
+    this.setDrone(false);
     const mapDef = MAPS.find((m) => m.id === mapId) || MAPS[0];
     const carDef = getVehicle(carId);
     const quality = this.gfx.preset;
@@ -186,16 +241,12 @@ export class Game {
       for (const c of map.cylinders) this.world.addCylinder(...c);
       this.scene.add(map.group);
       this.map = map;
-      this.skyUniforms.top.value.set(map.sky.top);
-      this.skyUniforms.bottom.value.set(map.sky.bottom);
-      this.scene.fog = new THREE.FogExp2(map.sky.fog, map.sky.fogDensity);
-      this.scene.background = new THREE.Color(map.sky.fog);
-      this.hemi.intensity = map.lightIntensity.hemi;
-      this.sun.intensity = map.lightIntensity.sun;
+      this.mapDef = mapDef;
       this.camera.far = map.far;
       this.camera.updateProjectionMatrix();
       this.sky.scale.setScalar(map.far * 0.9);
       this.cameraRig = new CameraRig(this.camera, this.world);
+      this.drone = new DroneCamera(this.camera, this.world);
     }
 
     if (!this.model || this.carDef.id !== carDef.id) {
@@ -206,19 +257,47 @@ export class Game {
       if (this.model) { this.scene.remove(this.model.root); this.model.dispose(); }
       this.model = new CarModel(gltf, carDef, quality);
       this.carDef = carDef;
-      const paint = settings.data.paint[carDef.id];
-      if (paint) this.model.setPaint(paint);
+      this.model.setPaint(this.paintFor(carDef));
       this.scene.add(this.model.root);
       this.flames = new ExhaustFlames(this.model.body, this.model.exhausts);
     }
-    const spec = buildSpec(carDef, this.tuningFor(carDef), this.model.measured);
+    const spec = buildSpec(carDef, this.tuningFor(carDef), this.model.measured, settings.data.fitment[carDef.id]);
     this.vehicle = new Vehicle(spec, this.world);
     Object.assign(this.vehicle.assists, settings.data.assists);
     this.applyDriving();
     this.resetCar();
     this.cameraRig.mode = settings.data.camera.mode;
+    this.applyTimeOfDay();
+    this.prepareGpu();
     onProgress(1, 'Ready');
     this.emit('session', { car: carDef, map: mapDef });
+  }
+
+  /**
+   * Upload every texture and compile every shader now, while the loading screen is up.
+   * Otherwise three.js does it the first time each piece of scenery comes into view, which
+   * stalls the frame (very visible on maps with many textures).
+   */
+  prepareGpu() {
+    for (const f of this.map.foliage) f.mesh.visible = true;
+    this.scene.traverse((o) => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        for (const t of [m.map, m.alphaMap, m.normalMap, m.emissiveMap, m.roughnessMap, m.metalnessMap]) {
+          if (t) this.renderer.initTexture(t);
+        }
+      }
+    });
+    this.renderer.compile(this.scene, this.camera);
+    this.cullFoliage(true);
+  }
+
+  /** Hide tree/grass tiles beyond the preset's foliage distance (they dominate GTA maps). */
+  cullFoliage(force = false) {
+    if (!force && (this.foliageTick = (this.foliageTick || 0) + 1) % 10) return;
+    const range = FOLIAGE_RANGE[this.gfx.preset] ?? Infinity;
+    const cam = this.camera.position;
+    for (const f of this.map.foliage) f.mesh.visible = cam.distanceTo(f.center) - f.radius < range;
   }
 
   /** Spawn point chosen for the current map (Uphill/Downhill etc.). */
@@ -259,6 +338,22 @@ export class Game {
     if (p) { this.input.release(); this.audio.suspend(); } else { this.audio.init(); this.audio.resume(); }
   }
 
+  /** Switch between driving and the free-flying drone camera. */
+  setDrone(on) {
+    if (!this.drone || on === this.drone.active) return;
+    if (on) this.drone.start();
+    else { this.drone.stop(); this.cameraRig.snap(); }
+    this.input.setMode(on ? 'drone' : 'drive');
+    this.emit('hud', false);
+    this.emit('drone', on);
+  }
+
+  setHudHidden(hidden) {
+    this.input.hudHidden = hidden;
+    this.input.layout();
+    this.emit('hud', hidden);
+  }
+
   // ---------------- frame ----------------
   frame() {
     const now = performance.now();
@@ -274,7 +369,7 @@ export class Game {
 
   simulate(dt) {
     const v = this.vehicle;
-    const inp = this.input.update(dt);
+    const inp = this.drone.active ? PARKED : this.input.update(dt);
     const c = v.controls;
     c.steer = inp.steer;
     c.throttle = inp.throttle;
@@ -360,11 +455,13 @@ export class Game {
     const v = this.vehicle;
     const braking = v.controls.brake > 0.1 || (v.transmission === 'auto' && v.gear === -1 && v.controls.throttle > 0.1);
     this.model.update(v, braking);
-    this.cameraRig.update(dt, v, this.model);
+    if (this.drone.active) this.drone.update(dt, this.paused ? DRONE_IDLE : this.input.droneInput());
+    else this.cameraRig.update(dt, v, this.model);
+    this.cullFoliage();
     this.sky.position.copy(this.camera.position);
 
     // sun + shadow follow the car
-    const sunDir = this.map.sun;
+    const sunDir = this.sunDir;
     this.sun.target.position.copy(v.renderPosition);
     this.sun.position.copy(v.renderPosition).addScaledVector(sunDir, 70);
 

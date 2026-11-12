@@ -1,7 +1,8 @@
 // DOM user interface: menus, settings, HUD readouts and the HUD layout editor.
 
 import { settings, DEFAULTS, DEFAULT_HUD_LAYOUT, applyPreset } from '../core/settings.js';
-import { VEHICLES, TUNING_PARAMS } from '../vehicle/specs.js';
+import { VEHICLES, TUNING_PARAMS, FITMENT_PARAMS } from '../vehicle/specs.js';
+import { TIMES_OF_DAY } from '../world/timeOfDay.js';
 import { MAPS } from '../core/Game.js';
 import { CAMERA_MODES } from '../camera/CameraRig.js';
 
@@ -16,7 +17,23 @@ const h = (tag, attrs = {}, ...children) => {
   return el;
 };
 
-const PAINTS = [null, '#c8102e', '#f4f4f2', '#111214', '#1d4ea8', '#9aa3ab', '#f2b705', '#2f7d4f'];
+const PAINTS = [
+  [null, 'Original paint'],
+  ['#f1f0eb', 'Super White II'],
+  ['#c5c8cc', 'Silver metallic'],
+  ['#6b7076', 'Gunmetal grey'],
+  ['#111214', 'Black'],
+  ['#c8102e', 'Red'],
+  ['#7a1020', 'Wine red'],
+  ['#1d4ea8', 'Blue'],
+  ['#1a2a52', 'Midnight blue'],
+  ['#2f7d4f', 'Green'],
+  ['#f2b705', 'Yellow'],
+  ['#e8641a', 'Orange'],
+  ['#6b3fa0', 'Purple'],
+  ['#d9c9a3', 'Champagne'],
+];
+const SPEEDO_COLORS = ['#ffd23f', '#ffffff', '#ff4b3a', '#ff8a1f', '#3fe07a', '#3fb8ff', '#b06bff', '#ff5fb4'];
 
 export class UI {
   constructor(root, game) {
@@ -27,6 +44,10 @@ export class UI {
     this.build();
     game.on('pause', () => { if (this.state === 'driving') this.showPause(); });
     game.on('frame', (v) => this.updateHud(v));
+    game.on('hud', (hidden) => this.hud.classList.toggle('hud-off', hidden));
+    game.on('drone', (on) => this.flash(on
+      ? 'Drone: drag to look · stick/WASD fly · ▲▼ or R/F altitude · FOV −/+ or -/= zoom · H hide HUD · V exit'
+      : 'Back in the car', on ? 3500 : 1200));
     this.showMenu();
   }
 
@@ -56,17 +77,18 @@ export class UI {
     for (const el of [this.menu, this.pause, this.settingsEl, this.loading, this.editor]) el.classList.add('hidden');
   }
 
-  flash(text) {
+  flash(text, ms = 1200) {
     this.toast.textContent = text;
     this.toast.classList.add('show');
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.toast.classList.remove('show'), 1200);
+    this.toastTimer = setTimeout(() => this.toast.classList.remove('show'), ms);
   }
 
   // ---------------- main menu ----------------
   showMenu() {
     this.state = 'menu';
     this.game.setPaused(true);
+    this.game.setDrone(false);
     this.hideAll();
     this.hud.classList.add('hidden');
     this.game.input.root.classList.add('hidden');
@@ -85,23 +107,36 @@ export class UI {
       class: `chip ${s.id === spawnId ? 'selected' : ''}`,
       onclick: () => { settings.set(`spawn.${mapDef.id}`, s.id); this.showMenu(); },
     }, s.name));
-    const paint = PAINTS.map((c) => h('button', {
-      class: `swatch ${(d.paint[d.car] || null) === c ? 'selected' : ''}`,
-      style: c ? `background:${c}` : 'background:linear-gradient(135deg,#888 50%,#444 50%)',
-      title: c ? c : 'Original',
+    const carDef = VEHICLES.find((v) => v.id === d.car) || VEHICLES[0];
+    const current = d.paint[d.car] || null;
+    const paint = PAINTS.map(([c, name]) => h('button', {
+      class: `swatch ${current === c ? 'selected' : ''}`,
+      style: c ? `background:${c}` : `background:linear-gradient(135deg,${carDef.defaultPaint || '#999'} 50%,#444 50%)`,
+      title: name,
+      'aria-label': name,
       onclick: () => { settings.set(`paint.${d.car}`, c); this.showMenu(); },
     }));
+    const custom = h('input', { type: 'color', class: 'swatch custom', title: 'Custom colour', value: current || carDef.defaultPaint || '#ffffff' });
+    custom.addEventListener('change', () => { settings.set(`paint.${d.car}`, custom.value); this.showMenu(); });
+    if (current && !PAINTS.some(([c]) => c === current)) custom.classList.add('selected');
+    paint.push(custom);
+    const timeButtons = TIMES_OF_DAY.map(([id, label]) => h('button', {
+      class: `chip ${d.timeOfDay === id ? 'selected' : ''}`,
+      onclick: () => { settings.set('timeOfDay', id); this.showMenu(); },
+    }, label));
     this.menu.replaceChildren(h('div', { class: 'panel menu-panel' },
       h('h1', {}, 'TOUGE ', h('span', {}, 'DRIFT')),
       h('div', { class: 'menu-cols' },
         h('section', {}, h('h3', {}, 'Car'), h('div', { class: 'cards' }, carCards), h('h3', {}, 'Paint'), h('div', { class: 'swatches' }, paint)),
         h('section', {}, h('h3', {}, 'Map'), h('div', { class: 'cards' }, mapCards),
-          h('h3', {}, 'Start position'), h('div', { class: 'chips' }, spawnButtons)),
+          h('h3', {}, 'Start position'), h('div', { class: 'chips' }, spawnButtons),
+          h('h3', {}, 'Time of day'), h('div', { class: 'chips' }, timeButtons)),
       ),
       h('div', { class: 'row buttons' },
         h('button', { class: 'primary', onclick: () => this.start() }, 'DRIVE'),
         h('button', { onclick: () => this.showSettings('menu') }, 'Settings'),
         h('button', { onclick: () => { this.tab = 'tuning'; this.showSettings('menu'); } }, 'Tune car'),
+        h('button', { onclick: () => { this.tab = 'fitment'; this.showSettings('menu'); } }, 'Fitment'),
       ),
       h('p', { class: 'hint' }, 'Keyboard: W/S or ↑/↓ throttle/brake · A/D steer · Space handbrake · E/Q shift · X clutch · C camera · R reset · Esc pause'),
     ));
@@ -155,6 +190,7 @@ export class UI {
         }, `Restart: ${s.name}`)))
         : null,
       h('button', { onclick: () => this.showSettings('pause') }, 'Settings'),
+      h('button', { onclick: () => { this.tab = 'fitment'; this.showSettings('pause'); } }, 'Fitment'),
       h('button', { onclick: () => this.showMenu() }, 'Main menu'),
     ));
     this.pause.classList.remove('hidden');
@@ -165,7 +201,7 @@ export class UI {
     this.back = back || this.back;
     this.hideAll();
     this.state = 'settings';
-    const tabs = [['driving', 'Driving'], ['assists', 'Assists'], ['camera', 'Camera'], ['hud', 'HUD'], ['graphics', 'Graphics'], ['audio', 'Audio'], ['tuning', 'Tuning']];
+    const tabs = [['driving', 'Driving'], ['assists', 'Assists'], ['camera', 'Camera'], ['hud', 'HUD'], ['graphics', 'Graphics'], ['audio', 'Audio'], ['tuning', 'Tuning'], ['fitment', 'Fitment']];
     const body = h('div', { class: 'tab-body' }, this.tabContent(this.tab));
     this.settingsEl.replaceChildren(h('div', { class: 'panel settings-panel' },
       h('div', { class: 'tabs' }, tabs.map(([id, label]) => h('button', {
@@ -174,6 +210,8 @@ export class UI {
       }, label)), h('button', { class: 'close', onclick: () => this.closeSettings() }, '✕')),
       body,
     ));
+    // Fitment edits are previewed live on the car, so dock the panel and keep the view clear.
+    this.settingsEl.classList.toggle('docked', this.tab === 'fitment');
     this.settingsEl.classList.remove('hidden');
   }
 
@@ -207,6 +245,22 @@ export class UI {
     return h('label', { class: 'field toggle' }, h('span', {}, label), cb);
   }
 
+  /** Preset colour swatches plus a free colour picker. */
+  colorField(label, path, colors) {
+    const cur = settings.get(path);
+    const pick = (c) => { settings.set(path, c); this.showSettings(); };
+    const swatches = colors.map((c) => h('button', {
+      class: `swatch ${cur === c ? 'selected' : ''}`,
+      style: `background:${c}`,
+      title: c,
+      'aria-label': c,
+      onclick: () => pick(c),
+    }));
+    const custom = h('input', { type: 'color', class: `swatch custom ${colors.includes(cur) ? '' : 'selected'}`, title: 'Custom colour', value: cur });
+    custom.addEventListener('change', () => pick(custom.value));
+    return h('div', { class: 'field' }, h('span', {}, label), h('div', { class: 'swatches' }, swatches, custom));
+  }
+
   tabContent(tab) {
     const pct = (v) => `${Math.round(v * 100)}%`;
     const x = (v) => `${(+v).toFixed(2)}×`;
@@ -237,6 +291,7 @@ export class UI {
         this.slider('Distance', 'camera.distance', 0.6, 1.8, 0.05, x),
         this.slider('Height', 'camera.height', 0.5, 2, 0.05, x),
         this.slider('Field of view', 'camera.fov', 45, 90, 1, (v) => `${v}°`),
+        this.slider('Drone field of view', 'camera.droneFov', 30, 110, 1, (v) => `${v}°`),
         this.slider('Smoothing', 'camera.smoothing', 0, 1, 0.05, pct),
         this.slider('Sensitivity', 'camera.sensitivity', 0, 1, 0.05, pct),
         this.slider('Rotation strength', 'camera.rotation', 0, 1, 0.05, pct),
@@ -246,6 +301,7 @@ export class UI {
       ];
       case 'hud': return [
         this.slider('Button transparency', 'hud.opacity', 0.15, 1, 0.05, pct),
+        this.colorField('Speedometer colour', 'hud.speedoColor', SPEEDO_COLORS),
         h('button', { class: 'primary', onclick: () => this.openEditor() }, 'Edit button positions & sizes'),
         h('button', { onclick: () => { settings.set('hud.layout', structuredClone(DEFAULT_HUD_LAYOUT)); this.showSettings(); } }, 'Restore default HUD layout'),
         this.toggle('Vibration', 'hud.vibration'),
@@ -281,6 +337,24 @@ export class UI {
         });
         return [h('h3', {}, car.name), ...rows,
           h('button', { onclick: () => { settings.set(`tuning.${car.id}`, {}); this.showSettings(); } }, 'Reset tuning to stock')];
+      }
+      case 'fitment': {
+        const car = VEHICLES.find((v) => v.id === settings.data.car);
+        const fit = settings.data.fitment[car.id] || {};
+        const fmt = (p, v) => `${v > 0 && p.key !== 'rideHeight' && p.unit === '°' ? '+' : ''}${(+v).toFixed(1)} ${p.unit}`;
+        const rows = FITMENT_PARAMS.map((p) => {
+          const val = fit[p.key] ?? 0;
+          const out = h('span', { class: 'val' }, fmt(p, val));
+          const input = h('input', { type: 'range', min: p.min, max: p.max, step: p.step, value: val });
+          input.addEventListener('input', () => { out.textContent = fmt(p, input.value); settings.set(`fitment.${car.id}.${p.key}`, +input.value); });
+          return h('label', { class: 'field' }, h('span', {}, p.label), input, out);
+        });
+        const live = this.game.model?.def.id === car.id;
+        return [h('h3', {}, `${car.name} — fitment`), ...rows,
+          h('p', { class: 'hint' }, live
+            ? 'Changes show on the car right away and are saved for this car.'
+            : 'Saved for this car; start a drive with it to see the result.'),
+          h('button', { onclick: () => { settings.set(`fitment.${car.id}`, {}); this.showSettings(); } }, 'Reset fitment to stock')];
       }
     }
     return [];
@@ -342,7 +416,7 @@ export class UI {
     ctx.strokeStyle = 'rgba(230,40,40,0.85)';
     ctx.beginPath(); ctx.arc(cx, cy, R, ang(spec.redlineRpm), a1); ctx.stroke();
     const rpm = v.rpm;
-    ctx.strokeStyle = rpm > spec.redlineRpm ? '#ff4b3a' : '#ffd23f';
+    ctx.strokeStyle = rpm > spec.redlineRpm ? '#ff4b3a' : settings.data.hud.speedoColor;
     ctx.lineWidth = 8;
     ctx.beginPath(); ctx.arc(cx, cy, R, a0, ang(rpm)); ctx.stroke();
     ctx.fillStyle = '#fff';
@@ -357,7 +431,7 @@ export class UI {
     ctx.fillStyle = v.gear === -1 ? '#ff6b5a' : '#fff';
     ctx.fillText(gear, cx, cy - 18);
     ctx.font = 'bold 26px system-ui';
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = settings.data.hud.speedoColor;
     ctx.fillText(`${Math.round(Math.abs(v.speed) * 3.6)}`, cx, cy + 14);
     ctx.font = '11px system-ui';
     ctx.fillStyle = '#bbb';
