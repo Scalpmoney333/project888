@@ -12,6 +12,7 @@ import { Vehicle } from '../physics/Vehicle.js';
 import { getVehicle, buildSpec } from '../vehicle/specs.js';
 import { CarModel } from '../vehicle/CarModel.js';
 import { MAPS, loadMap } from '../world/maps.js';
+import { lightingFor } from '../world/timeOfDay.js';
 import { CameraRig } from '../camera/CameraRig.js';
 import { DroneCamera } from '../camera/DroneCamera.js';
 import { Input } from '../input/Input.js';
@@ -162,6 +163,34 @@ export class Game {
     if (path.startsWith('driving') && this.vehicle) this.applyDriving();
     if (path.startsWith('tuning') && this.vehicle) this.applyTuning();
     if (path.startsWith('paint') && this.model) this.model.setPaint(this.paintFor(this.carDef));
+    if (path.startsWith('fitment') && this.vehicle) this.applyTuning();
+    if (path === 'timeOfDay' && this.map) this.applyTimeOfDay();
+    if (path === 'headlights' && this.model) this.applyHeadlights();
+  }
+
+  /** Sky, fog and lights for the current map at the chosen time of day. */
+  applyTimeOfDay() {
+    const time = settings.data.timeOfDay;
+    const L = lightingFor(this.mapDef, time);
+    this.skyUniforms.top.value.copy(L.skyTop);
+    this.skyUniforms.bottom.value.copy(L.skyBottom);
+    this.scene.fog = new THREE.FogExp2(L.fog, L.fogDensity);
+    this.scene.background = L.fog.clone();
+    this.hemi.color.copy(L.hemiSky);
+    this.hemi.groundColor.copy(L.hemiGround);
+    this.hemi.intensity = L.hemi;
+    this.sun.color.copy(L.sunColor);
+    this.sun.intensity = L.sun;
+    this.sunDir = L.sunDir;
+    this.input.setNight(time === 'night');
+    this.applyHeadlights();
+  }
+
+  /** Headlights only exist at night (adding lights recompiles every shader, so not mid-drive). */
+  applyHeadlights() {
+    if (!this.model) return;
+    const night = settings.data.timeOfDay === 'night';
+    this.model.setHeadlights(night, night && settings.data.headlights);
   }
 
   /** Player's paint for a car, else the car's default colour, else the model's original paint. */
@@ -181,7 +210,7 @@ export class Game {
   }
 
   applyTuning() {
-    const spec = buildSpec(this.carDef, this.tuningFor(this.carDef), this.model.measured);
+    const spec = buildSpec(this.carDef, this.tuningFor(this.carDef), this.model.measured, settings.data.fitment[this.carDef.id]);
     this.vehicle.applySpec(spec);
     this.vehicle.drivetrain.spec.autoBlip = this.vehicle.transmission === 'auto';
   }
@@ -206,12 +235,7 @@ export class Game {
       for (const c of map.cylinders) this.world.addCylinder(...c);
       this.scene.add(map.group);
       this.map = map;
-      this.skyUniforms.top.value.set(map.sky.top);
-      this.skyUniforms.bottom.value.set(map.sky.bottom);
-      this.scene.fog = new THREE.FogExp2(map.sky.fog, map.sky.fogDensity);
-      this.scene.background = new THREE.Color(map.sky.fog);
-      this.hemi.intensity = map.lightIntensity.hemi;
-      this.sun.intensity = map.lightIntensity.sun;
+      this.mapDef = mapDef;
       this.camera.far = map.far;
       this.camera.updateProjectionMatrix();
       this.sky.scale.setScalar(map.far * 0.9);
@@ -231,12 +255,13 @@ export class Game {
       this.scene.add(this.model.root);
       this.flames = new ExhaustFlames(this.model.body, this.model.exhausts);
     }
-    const spec = buildSpec(carDef, this.tuningFor(carDef), this.model.measured);
+    const spec = buildSpec(carDef, this.tuningFor(carDef), this.model.measured, settings.data.fitment[carDef.id]);
     this.vehicle = new Vehicle(spec, this.world);
     Object.assign(this.vehicle.assists, settings.data.assists);
     this.applyDriving();
     this.resetCar();
     this.cameraRig.mode = settings.data.camera.mode;
+    this.applyTimeOfDay();
     this.prepareGpu();
     onProgress(1, 'Ready');
     this.emit('session', { car: carDef, map: mapDef });
@@ -430,7 +455,7 @@ export class Game {
     this.sky.position.copy(this.camera.position);
 
     // sun + shadow follow the car
-    const sunDir = this.map.sun;
+    const sunDir = this.sunDir;
     this.sun.target.position.copy(v.renderPosition);
     this.sun.position.copy(v.renderPosition).addScaledVector(sunDir, 70);
 
