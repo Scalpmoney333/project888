@@ -29,16 +29,6 @@ export const MAPS = [
     far: 7000,
   },
   {
-    id: 'ashinoko',
-    name: 'Ashinoko',
-    subtitle: '6 km forest skyline road',
-    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
-    sky: { top: 0x7fa8d8, bottom: 0xd2dde6, fog: 0xc8d4dc, fogDensity: 0.0012 },
-    sun: [-0.4, 0.75, 0.5],
-    light: { hemi: 1.6, sun: 1.5 },
-    far: 6000,
-  },
-  {
     id: 'shomaru',
     name: 'Shomaru Touge',
     subtitle: '5.1 km Initial D pass (GTA SA mod) • Uphill / Downhill',
@@ -47,6 +37,26 @@ export const MAPS = [
     sun: [0.35, 0.8, -0.3],
     light: { hemi: 1.7, sun: 1.4 },
     far: 3500,
+  },
+  {
+    id: 'nagao_gta',
+    name: 'Nagao Touge (GTA)',
+    subtitle: '6.1 km pass from the GTA SA / MTA mod • Uphill / Downhill',
+    spawns: [{ id: 'downhill', name: 'Downhill' }, { id: 'uphill', name: 'Uphill' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.0016 },
+    sun: [-0.45, 0.8, 0.3],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 4000,
+  },
+  {
+    id: 'tsukuba_gta',
+    name: 'Tsukuba Touge (GTA)',
+    subtitle: '3.3 km hairpin pass from the GTA SA / MTA mod • Uphill / Downhill',
+    spawns: [{ id: 'downhill', name: 'Downhill' }, { id: 'uphill', name: 'Uphill' }],
+    sky: { top: 0x82a8d6, bottom: 0xd9e0e4, fog: 0xccd5d9, fogDensity: 0.002 },
+    sun: [0.4, 0.78, 0.35],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 3000,
   },
 ];
 
