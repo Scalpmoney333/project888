@@ -78,6 +78,16 @@ export const MAPS = [
     light: { hemi: 1.6, sun: 1.5 },
     far: 1500,
   },
+  {
+    id: 'usui',
+    name: 'Usui Pass',
+    subtitle: 'Initial D hairpin pass • GTA SA / MTA mod • Uphill / Downhill',
+    spawns: [{ id: 'downhill', name: 'Downhill' }, { id: 'uphill', name: 'Uphill' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.0018 },
+    sun: [-0.4, 0.8, 0.35],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 3000,
+  },
 ];
 
 export async function loadMap(def, { renderer, quality, onProgress }) {
