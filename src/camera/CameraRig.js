@@ -29,7 +29,9 @@ export class CameraRig {
     this.mode = settings.data.camera.mode;
     this.yaw = 0;
     this.pos = new THREE.Vector3();
+    this.offset = new THREE.Vector3(); // smoothed camera position relative to the car
     this.look = new THREE.Vector3();
+    this.lookOffset = new THREE.Vector3();
     this.side = 1;
     this.shakeT = 0;
     this.trauma = 0;
@@ -134,10 +136,12 @@ export class CameraRig {
       }
       const k = (close ? 7 : 4.5) * (0.4 + c.sensitivity * 1.2) * (1.4 - c.smoothing);
       this.yaw += wrap(target - this.yaw) * damp(k, dt);
-      const desired = _v2.set(-Math.sin(this.yaw) * dist, height, -Math.cos(this.yaw) * dist).add(carPos);
-      // Positional lag gives a sense of inertia; less lag when close.
+      const desired = _v2.set(-Math.sin(this.yaw) * dist, height, -Math.cos(this.yaw) * dist);
+      // Smooth the offset from the car, not the world position: a world-space lag grows with
+      // speed and lets the camera fall further behind the faster the car goes.
       const pk = (close ? 14 : 9) * (1.3 - c.smoothing);
-      this.pos.lerp(desired, this.needSnap ? 1 : damp(pk, dt));
+      this.offset.lerp(desired, this.needSnap ? 1 : damp(pk, dt));
+      this.pos.copy(carPos).add(this.offset);
       this.updateLook(dt);
       // Orbit the smoothed position around the car by the drag-look offset.
       const camPos = _v3.copy(this.pos);
@@ -153,18 +157,23 @@ export class CameraRig {
       if (this.world.raycast(_v, DOWN, 40, _hit)) {
         const gy = _v.y - _hit.distance + 0.4;
         if (camPos.y < gy) camPos.y = gy;
-        if (this.pos.y < gy) this.pos.y = gy;
+        if (this.pos.y < gy) {
+          this.pos.y = gy;
+          this.offset.y = gy - carPos.y;
+        }
       }
       // No look-ahead while looking sideways, so the car stays centred.
       const lookAhead = Math.min(4, speed * 0.08) * (1 - Math.min(1, Math.abs(this.lookYaw) * 2));
-      const lookTarget = _v.set(Math.sin(this.yaw) * lookAhead, 0.75, Math.cos(this.yaw) * lookAhead).add(carPos);
-      this.look.lerp(lookTarget, this.needSnap ? 1 : damp(20, dt));
+      const lookTarget = _v.set(Math.sin(this.yaw) * lookAhead, 0.75, Math.cos(this.yaw) * lookAhead);
+      this.lookOffset.lerp(lookTarget, this.needSnap ? 1 : damp(20, dt));
+      this.look.copy(carPos).add(this.lookOffset);
       this.needSnap = false;
       cam.position.copy(camPos);
       cam.position.x += sx;
       cam.position.y += sy;
       cam.lookAt(this.look);
-      fov += (cine ? 6 : 0) + Math.min(10, speed * 0.12) + c.drift * Math.min(1, Math.abs(beta) / 0.7) * 6;
+      // Speed widens the view a little (less in the chase views, so the car keeps its size).
+      fov += (cine ? 6 + Math.min(10, speed * 0.12) : Math.min(5, speed * 0.06)) + c.drift * Math.min(1, Math.abs(beta) / 0.7) * 6;
       this.setNear(0.1);
     } else {
       // Car-mounted cameras with a stabilised horizon.

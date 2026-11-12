@@ -1,12 +1,16 @@
 // Free-flying drone camera: fly around the map while the car stays parked.
 
 import * as THREE from 'three';
+import { settings } from '../core/settings.js';
 
 const _fwd = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _e = new THREE.Euler(0, 0, 0, 'YXZ');
 const DOWN = new THREE.Vector3(0, -1, 0);
 const _hit = { distance: 0, normal: new THREE.Vector3(), surface: null };
+export const DRONE_FOV_MIN = 30;
+export const DRONE_FOV_MAX = 110;
+const ZOOM_RATE = 40; // degrees per second while a FOV button is held
 
 export class DroneCamera {
   constructor(camera, world) {
@@ -31,15 +35,24 @@ export class DroneCamera {
 
   stop() {
     this.active = false;
+    settings.save(); // keep the last zoom (changed every frame without saving)
   }
 
   look(dYaw, dPitch) {
-    this.yaw -= dYaw;
-    this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + dPitch));
+    // Narrow views turn slower so aiming stays precise when zoomed in.
+    const k = this.camera.fov / 70;
+    this.yaw -= dYaw * k;
+    this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + dPitch * k));
   }
 
-  /** @param input {forward, right, up} in -1..1 and fast */
+  /** @param input {forward, right, up} in -1..1, zoom -1/0/1 and fast */
   update(dt, input) {
+    const c = settings.data.camera;
+    if (input.zoom) c.droneFov = Math.max(DRONE_FOV_MIN, Math.min(DRONE_FOV_MAX, c.droneFov + input.zoom * ZOOM_RATE * dt));
+    if (Math.abs(this.camera.fov - c.droneFov) > 0.01) {
+      this.camera.fov = c.droneFov;
+      this.camera.updateProjectionMatrix();
+    }
     const speed = input.fast ? 45 : 16;
     _fwd.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     _right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));

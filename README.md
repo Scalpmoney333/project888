@@ -29,7 +29,7 @@ locally generated key (`android/debug.keystore`, not committed), so Android asks
 installs from unknown sources. A rebuild on another machine has a different key and must be
 installed after uninstalling the old app.
 
-The single HTML file still works from a phone's storage, but with seven cars and five maps it
+The single HTML file still works from a phone's storage, but with six cars and seven maps it
 is large; the APK is the recommended way to play on a phone.
 
 ## Controls
@@ -41,7 +41,7 @@ is large; the APK is the recommended way to play on a phone.
 | E-BRAKE | Space | A / B |
 | ▲ ▼ gears, CLUTCH (manual only) | E / Q, X clutch | RB / LB, X |
 | CAM, ⟲ reset to start, Ⅱ pause | C, R, Esc | Y, Back, Start |
-| DRONE (free camera: stick to fly, ▲ ▼ altitude, FAST, HIDE HUD, EXIT); drag the screen to look around | V, then WASD, R/F, Shift, H, V | — |
+| DRONE (free camera: stick to fly, ▲ ▼ altitude, FOV − / FOV + zoom, FAST, HIDE HUD, EXIT); drag the screen to look around | V, then WASD, R/F, -/=, Shift, H, V | — |
 
 All touch controls track their own pointer, so steering, throttle and handbrake work at the
 same time. Every control can be moved and resized (Settings → HUD → Edit), and all settings are
@@ -111,11 +111,36 @@ behaves the same at 30, 60 or 144 FPS.
   node tools/optimize-car.mjs out/mark2.glb public/assets/cars/toyota_mark_ii_jzx100_gta.glb --simplify 0.2 0.0012
   ```
 
+  The S15 (elegy.dff/txd) was converted the same way, without its engine and gearbox (hidden
+  under the bonnet) and with 512 px textures:
+
+  ```bash
+  venv/bin/python tools/gta/convert_gta_car.py "<folder with elegy.dff, elegy.txd>" out/s15.glb
+  node tools/optimize-car.mjs out/s15.glb public/assets/cars/nissan_silvia_s15_gta.glb --drop "^(sr20det|transmision)" --simplify 0.1 0.004 --texsize 512
+  ```
+
   The car archive is RAR5; extract it with RARLAB `unrar` (p7zip and unar fail on it).
 
   Nagao Touge (GTA), Tsukuba Touge (GTA) and the detailed Chaser Tourer V were added in v1.3
   from GTA SA / MTA mods. Their glb/json files were recovered from the v1.3 APK; the converter
   settings used for them were not recovered. Forest Loop Raceway (no track geometry in its
-  file), Oi Wharf and Ashinoko were removed.
+  file), Oi Wharf and Ashinoko were removed, and in v1.4 the low-detail Chaser and Mark II
+  (replaced by their GTA versions).
+
+* **Performance** — keep each map near Shomaru's budget (~160k triangles, textures ≤512 px)
+  and each car ≤ ~180k triangles with 512 px textures (`node tools/glb-stats.mjs <file.glb>`
+  prints triangles and estimated GPU texture memory). `tools/simplify-map.mjs` thins an existing
+  map without changing how the road drives (collidable tiles keep a 2 cm error bound and locked
+  borders; alpha-tested foliage is left alone). In v1.4 it took GTA Nagao from 802k to 674k and
+  GTA Tsukuba from 613k to 450k triangles:
+
+  ```bash
+  node tools/simplify-map.mjs public/assets/maps/nagao_gta.glb out/nagao_gta.raw.glb 0.02 0.12
+  node tools/compress-glb.mjs out/nagao_gta.raw.glb public/assets/maps/nagao_gta.glb
+  ```
+
+  At runtime, foliage tiles are only drawn within 220 / 380 / 700 m (low / medium / high
+  graphics), nothing is drawn where the fog is already opaque, and all textures and shaders are
+  uploaded while the loading screen is up instead of the first time they come into view.
 
 Make sure you have the rights to redistribute the uploaded models and map before publishing.
