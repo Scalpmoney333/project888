@@ -23,6 +23,8 @@ export const DEFAULT_HUD_LAYOUT = {
   droneUp: { x: 90, y: 56, size: 70 },
   droneDown: { x: 90, y: 80, size: 70 },
   droneFast: { x: 77, y: 80, size: 56 },
+  droneFovIn: { x: 64, y: 88, size: 48 },
+  droneFovOut: { x: 64, y: 72, size: 48 },
   droneExit: { x: 86, y: 8, size: 52 },
   hudToggle: { x: 75, y: 8, size: 52 },
 };
@@ -55,6 +57,7 @@ export const DEFAULTS = {
     distance: 1,
     height: 1,
     fov: 62,
+    droneFov: 75,
     smoothing: 0.5,
     sensitivity: 0.5,
     rotation: 0.55,
@@ -76,6 +79,7 @@ export const DEFAULTS = {
     reflections: true,
     exhaust: true,
     resolution: 1.0, // multiplier on the preset pixel ratio
+    viewDistance: null, // metres; null = follow the preset
     adaptive: true,
     showFps: true,
   },
@@ -83,9 +87,9 @@ export const DEFAULTS = {
 };
 
 export const GRAPHICS_PRESETS = {
-  low: { pixelRatio: 0.65, shadows: false, shadowSize: 0, smoke: 'low', reflections: false, skidmarks: true, exhaust: false, maxDpr: 1.0 },
-  medium: { pixelRatio: 0.85, shadows: true, shadowSize: 1024, smoke: 'medium', reflections: true, skidmarks: true, exhaust: true, maxDpr: 1.5 },
-  high: { pixelRatio: 1.0, shadows: true, shadowSize: 2048, smoke: 'high', reflections: true, skidmarks: true, exhaust: true, maxDpr: 2.0 },
+  low: { pixelRatio: 0.65, shadows: false, shadowSize: 0, smoke: 'low', reflections: false, skidmarks: true, exhaust: false, maxDpr: 1.0, viewDistance: 450 },
+  medium: { pixelRatio: 0.85, shadows: true, shadowSize: 1024, smoke: 'medium', reflections: true, skidmarks: true, exhaust: true, maxDpr: 1.5, viewDistance: 700 },
+  high: { pixelRatio: 1.0, shadows: true, shadowSize: 2048, smoke: 'high', reflections: true, skidmarks: true, exhaust: true, maxDpr: 2.0, viewDistance: 1100 },
 };
 
 function merge(base, over) {
@@ -106,6 +110,9 @@ class SettingsStore {
     // Migrations from earlier versions.
     if (this.data.driving.wheelRange === 140) this.data.driving.wheelRange = 720;
     if (['forest', 'oi', 'ashinoko'].includes(this.data.map)) this.data.map = 'nagao';
+    // 1.4 removed the non-GTA Chaser and Mark II models.
+    if (this.data.car === 'chaser') this.data.car = 'chaser_gta';
+    if (this.data.car === 'markii') this.data.car = 'markii_gta';
   }
 
   get(path) {
@@ -151,7 +158,7 @@ export function resolvePreset(preset) {
 export function applyPreset(preset) {
   const p = GRAPHICS_PRESETS[resolvePreset(preset)];
   const g = settings.data.graphics;
-  Object.assign(g, { preset, shadows: p.shadows, smoke: p.smoke, reflections: p.reflections, skidmarks: p.skidmarks, exhaust: p.exhaust, resolution: 1 });
+  Object.assign(g, { preset, shadows: p.shadows, smoke: p.smoke, reflections: p.reflections, skidmarks: p.skidmarks, exhaust: p.exhaust, resolution: 1, viewDistance: null });
   settings.set('graphics', g);
 }
 
@@ -169,6 +176,7 @@ export function resolveGraphics(g = settings.data.graphics) {
     skidmarks: g.skidmarks,
     exhaust: g.exhaust,
     adaptive: g.adaptive,
+    viewDistance: g.viewDistance || p.viewDistance,
   };
 }
 
