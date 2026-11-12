@@ -1,14 +1,87 @@
 {
   "shomaru": {
     "surfaces": [
-      { "match": "road_dirt|road_side_c", "surface": 4 },
-      { "match": "road", "surface": 0 },
-      { "match": "slope_concrete|concrete|wall|gard|block", "surface": 2 },
-      { "match": "slope|grass", "surface": 1 }
+      {
+        "match": "road_dirt|road_side_c",
+        "surface": 4
+      },
+      {
+        "match": "road",
+        "surface": 0
+      },
+      {
+        "match": "slope_concrete|concrete|wall|gard|block",
+        "surface": 2
+      },
+      {
+        "match": "slope|grass",
+        "surface": 1
+      }
     ],
     "defaultSurface": 2,
     "foliage": "plant_tree_[a-f]|s_sy_tree1|forest|n_sy_grass|h_sy_orange",
     "decals": "road_center|road_mark",
     "tile": 3000
+  },
+  "nagao_gta": {
+    "surfaces": [
+      {
+        "match": "sproad_tarmac|sokudou|mizo",
+        "surface": 0
+      },
+      {
+        "match": "kusa",
+        "surface": 1
+      },
+      {
+        "match": "walkway|wall|texture1kai|mat",
+        "surface": 2
+      }
+    ],
+    "defaultSurface": 2,
+    "foliage": "tree|otpt|otpo|phonepole|rpost|wall_fence",
+    "thin": [
+      {
+        "match": "^tree04$|^tree01$|tree_large|s_deciduous",
+        "keep": 0.3
+      },
+      {
+        "match": "^otpt_03$",
+        "keep": 0.3
+      }
+    ],
+    "maxTexture": 512,
+    "tile": 600
+  },
+  "tsukuba_gta": {
+    "surfaces": [
+      {
+        "match": "^sviest|tarmac|road_cobble|sidewalk",
+        "surface": 0
+      },
+      {
+        "match": "gravel",
+        "surface": 4
+      },
+      {
+        "match": "googlemap|grass",
+        "surface": 1
+      }
+    ],
+    "defaultSurface": 2,
+    "foliage": "yorkshire|alder_leaves|texture6|texture9|treeline|grassedge|fence0|phonepole|signs_|line_1|^4$|^1$|office|apartment|motel|ss1_lr|ss_1d|guardrailpole",
+    "thin": [
+      {
+        "match": "^yorkshiregrass$",
+        "keep": 0.15
+      },
+      {
+        "match": "^alder_leaves$|^yorkshiretrees$|^alder_trunk$",
+        "keep": 0.5
+      }
+    ],
+    "maxTexture": 512,
+    "tile": 400,
+    "heightSplit": 50
   }
 }

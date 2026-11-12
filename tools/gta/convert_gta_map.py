@@ -29,11 +29,16 @@ def find(pattern):
     return hits
 
 
-ipl = rw.read_ipl(open(find(r'.*\.ipl')[0], encoding='latin-1').read())
+ipls = find(r'.*\.ipl')
+if ipls:
+    ipl = rw.read_ipl(open(ipls[0], encoding='latin-1').read())
+else:  # MTA:SA resource (.map + client.lua)
+    ipl = rw.read_mta_resource(open(find(r'.*\.map')[0], encoding='latin-1').read(),
+                               open(find(r'client\.lua')[0], encoding='latin-1').read())
 dffs = {os.path.basename(p)[:-4].lower(): p for p in find(r'.*\.dff')}
 textures = {}
 for p in find(r'.*\.txd'):
-    textures.update(rw.read_txd(open(p, 'rb').read(), max_size=512))
+    textures.update(rw.read_txd(open(p, 'rb').read(), max_size=cfg.get('maxTexture', 512)))
 print('instances', len(ipl), 'models', len(dffs), 'textures', len(textures))
 
 
@@ -65,7 +70,9 @@ for inst in ipl:
         cache[name] = rw.read_dff(open(dffs[name], 'rb').read())[0]
     cl = cache[name]
     x, y, z, w = inst['rot']
-    R = qmat(-x, -y, -z, w)
+    # IPL stores the inverse rotation (see module docstring); MTA euler angles are direct.
+    R = qmat(x, y, z, w) if inst.get('mta') else qmat(-x, -y, -z, w)
+    R = R * inst.get('scale', 1.0)
     T = np.array(inst['pos'])
     for fi, gi in cl['atomics']:
         g = cl['geometries'][gi]
@@ -106,6 +113,24 @@ t = pos[idx]
 area = np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]), axis=1)
 keep = area > 1e-8
 idx, tmat, tsurf, tcol = idx[keep], tmat[keep], tsurf[keep], tcol[keep]
+
+# Thin dense decoration for phones: keep a fixed share of the separate pieces (grass tufts,
+# tree cards) of matching textures, chosen with a fixed seed so rebuilds are identical.
+rng = np.random.default_rng(1234)
+for rule in cfg.get('thin', []):
+    rx = re.compile(rule['match'], re.I)
+    mids = [i for i, m in enumerate(materials) if rx.search(m['name'])]
+    sel = np.where(np.isin(tmat, mids))[0]
+    if not len(sel):
+        continue
+    # "unit": "quad" thins individual quads (consecutive triangle pairs) inside large pieces
+    # such as layered tree walls; the default thins whole connected pieces.
+    lab = np.arange(len(sel)) // 2 if rule.get('unit') == 'quad' else maptools.components(pos, idx[sel])
+    keep_lab = rng.random(lab.max() + 1) < rule['keep']
+    drop = sel[~keep_lab[lab]]
+    mask = np.ones(len(idx), bool); mask[drop] = False
+    idx, tmat, tsurf, tcol = idx[mask], tmat[mask], tsurf[mask], tcol[mask]
+    print(f"thin {rule['match']}: {lab.max() + 1} pieces, kept {rule['keep']:.0%}, removed {len(drop)} tris")
 nrm = maptools.smooth_normals(pos, idx)
 print('triangles', len(idx), 'materials', len(materials), 'collidable', int(tcol.sum()), 'bounds', pos.min(0).round(), pos.max(0).round())
 

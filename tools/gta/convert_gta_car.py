@@ -45,7 +45,7 @@ def material(m):
     col = tuple(m['color'][:3])
     tex = (m['texture'] or '').lower()
     paint = PAINT.get(col)
-    key = (paint or tex, col if not paint else None, m['color'][3])
+    key = (paint, tex, col if not paint else None, m['color'][3])
     if key in mat_key:
         return mat_key[key]
     img = textures.get(tex)

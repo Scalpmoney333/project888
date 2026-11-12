@@ -63,7 +63,7 @@ report.options = await page.evaluate(() => {
 // Start driving on the forest map (MT).
 await page.evaluate(async () => {
   const { settings, ui } = window.__drift;
-  settings.set('map', 'ashinoko');
+  settings.set('map', 'shomaru');
   settings.set('car', 'skyline');
   ui.closeSettings();
   await ui.start();

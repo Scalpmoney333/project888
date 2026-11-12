@@ -356,6 +356,37 @@ def _decode_dxt3(buf, w, h):
 
 
 # ---------------------------------------------------------------- IPL / IDE
+def read_mta_resource(map_xml, client_lua):
+    """Placements from an MTA:SA map resource (<object model posX.. rotX..> in a .map file, with
+    engineLoadDFF/engineReplaceModel calls in client.lua mapping model ids to DFF files).
+    Returns IPL-style dicts; rotations are MTA euler degrees converted to a quaternion."""
+    import re
+    var_file = dict(re.findall(r"local\s+(\w+)\s*=\s*engineLoadDFF\s*\(\s*['\"]([^'\"]+)['\"]", client_lua))
+    model_file = {}
+    for var, mid in re.findall(r"engineReplaceModel\s*\(\s*(\w+)\s*,\s*(\d+)\s*\)", client_lua):
+        if var in var_file:
+            model_file[int(mid)] = var_file[var]
+    out = []
+    for attrs in re.findall(r'<object\s([^>]*)>', map_xml):
+        a = dict(re.findall(r'(\w+)="([^"]*)"', attrs))
+        mid = int(a['model'])
+        if mid not in model_file:
+            continue
+        rx, ry, rz = (np.radians(float(a.get(k, 0))) for k in ('rotX', 'rotY', 'rotZ'))
+        # MTA applies Z, then X, then Y (ZXY) in degrees; build the quaternion of that rotation.
+        def q(axis, ang):
+            v = np.zeros(3); v[axis] = np.sin(ang / 2)
+            return np.array([*v, np.cos(ang / 2)])
+        def mul(a, b):
+            ax, ay, az, aw = a; bx, by, bz, bw = b
+            return np.array([aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx,
+                             aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz])
+        quat = mul(mul(q(2, rz), q(0, rx)), q(1, ry))
+        out.append({'id': mid, 'model': model_file[mid].rsplit('.', 1)[0], 'pos': [float(a['posX']), float(a['posY']), float(a['posZ'])],
+                    'rot': quat.tolist(), 'lod': -1, 'mta': True, 'scale': float(a.get('scale', 1))})
+    return out
+
+
 def read_ipl(text):
     """Instances from the 'inst' section: (id, model, interior, pos(3), quat xyzw(4), lod)."""
     out, sec = [], None

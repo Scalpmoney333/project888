@@ -8,6 +8,8 @@ export const CAMERA_MODES = ['Chase', 'Close chase', 'Cinematic drift', 'Hood', 
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const LOOK_HOLD = 1.0; // seconds the free-look view is held after the finger lifts
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _m = new THREE.Matrix4();
@@ -62,6 +64,32 @@ export class CameraRig {
     this.trauma = Math.min(1, this.trauma + x);
   }
 
+  /** Free look offsets in radians: +yaw turns the view left (about world up), +pitch looks down. */
+  lookBy(dYaw, dPitch) {
+    this.lookYaw = wrap((this.lookYaw || 0) + dYaw);
+    this.lookPitch = Math.max(-0.5, Math.min(1.1, (this.lookPitch || 0) + dPitch));
+    this.lookReleased = performance.now();
+  }
+
+  setLookHeld(held) {
+    this.lookHeld = held;
+    this.lookReleased = performance.now();
+  }
+
+  /** After the finger lifts, hold the view for LOOK_HOLD seconds (wall clock, so it is ~1 s even at low fps), then ease back. */
+  updateLook(dt) {
+    this.lookYaw ||= 0;
+    this.lookPitch ||= 0;
+    if (this.lookHeld) return;
+    if (performance.now() - (this.lookReleased || 0) > LOOK_HOLD * 1000) {
+      const k = damp(7, dt);
+      this.lookYaw -= this.lookYaw * k;
+      this.lookPitch -= this.lookPitch * k;
+      if (Math.abs(this.lookYaw) < 1e-3) this.lookYaw = 0;
+      if (Math.abs(this.lookPitch) < 1e-3) this.lookPitch = 0;
+    }
+  }
+
   update(dt, vehicle, model) {
     const c = settings.data.camera;
     const cam = this.camera;
@@ -111,17 +139,28 @@ export class CameraRig {
       // Positional lag gives a sense of inertia; less lag when close.
       const pk = (close ? 14 : 9) * (1.3 - c.smoothing);
       this.pos.lerp(desired, this.needSnap ? 1 : damp(pk, dt));
+      this.updateLook(dt);
+      // Free look orbits the (lagged) chase position around the car.
+      const lp = _v3.copy(this.pos);
+      if (this.lookYaw || this.lookPitch) {
+        const o = lp.sub(carPos);
+        const r = o.length();
+        const a = Math.atan2(o.x, o.z) + this.lookYaw;
+        const e = Math.max(-0.15, Math.min(1.35, Math.atan2(o.y, Math.hypot(o.x, o.z)) + this.lookPitch));
+        lp.set(Math.sin(a) * Math.cos(e) * r, Math.sin(e) * r, Math.cos(a) * Math.cos(e) * r).add(carPos);
+      }
       // keep the camera above ground
-      _v.set(this.pos.x, this.pos.y + 2.5, this.pos.z);
+      _v.set(lp.x, lp.y + 2.5, lp.z);
       if (this.world.raycast(_v, DOWN, 40, _hit)) {
         const gy = _v.y - _hit.distance + 0.4;
+        if (lp.y < gy) lp.y = gy;
         if (this.pos.y < gy) this.pos.y = gy;
       }
-      const lookAhead = Math.min(4, speed * 0.08);
+      const lookAhead = Math.min(4, speed * 0.08) * (1 - Math.min(1, Math.abs(this.lookYaw) * 2));
       const lookTarget = _v.set(Math.sin(this.yaw) * lookAhead, 0.75, Math.cos(this.yaw) * lookAhead).add(carPos);
       this.look.lerp(lookTarget, this.needSnap ? 1 : damp(20, dt));
       this.needSnap = false;
-      cam.position.copy(this.pos);
+      cam.position.copy(lp);
       cam.position.x += sx;
       cam.position.y += sy;
       cam.lookAt(this.look);
@@ -146,6 +185,12 @@ export class CameraRig {
       _q.setFromEuler(_e);
       // Look along the car (+Z): rotate a camera that looks down -Z by 180 degrees about Y.
       cam.quaternion.copy(_q).multiply(Q180);
+      // Free look: turn the head (yaw about world up, pitch about the view's right axis).
+      this.updateLook(dt);
+      if (this.lookYaw || this.lookPitch) {
+        cam.quaternion.premultiply(_q.setFromAxisAngle(UP, this.lookYaw));
+        cam.quaternion.multiply(_q.setFromAxisAngle(_v.set(1, 0, 0), -Math.max(-0.6, Math.min(0.6, this.lookPitch))));
+      }
       cam.position.x += sx * 0.4;
       cam.position.y += sy * 0.4;
       fov += Math.min(8, speed * 0.08);

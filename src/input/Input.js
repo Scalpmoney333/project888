@@ -1,7 +1,7 @@
 // Touch HUD, keyboard and gamepad input. Every control tracks its own pointerId with pointer
 // capture, so steering, throttle and handbrake work simultaneously on multitouch screens.
 
-import { settings, vibrate } from '../core/settings.js';
+import { settings, vibrate, DEFAULT_HUD_LAYOUT } from '../core/settings.js';
 
 const WHEEL_SVG = `
 <svg viewBox="-100 -100 200 200" xmlns="http://www.w3.org/2000/svg">
@@ -18,23 +18,39 @@ const PEDAL_SVG = (label) => `<div class="pedal-face"><span>${label}</span></div
 const LABELS = {
   left: '◀', right: '▶', throttle: 'GAS', brake: 'BRAKE', handbrake: 'E-BRAKE', clutch: 'CLUTCH',
   gearUp: '▲', gearDown: '▼', camera: 'CAM', reset: '⟲', pause: 'Ⅱ',
+  drone: 'DRONE', droneUp: '▲', droneDown: '▼', droneExit: 'EXIT', hudToggle: 'HIDE HUD', droneFast: 'FAST',
 };
+// Controls shown only while driving, and only in drone mode.
+const DRIVE_ONLY = ['wheel', 'left', 'right', 'throttle', 'brake', 'handbrake', 'clutch', 'gearUp', 'gearDown', 'camera', 'reset', 'drone'];
+const DRONE_ONLY = ['droneStick', 'droneUp', 'droneDown', 'droneExit', 'hudToggle', 'droneFast'];
 
 export class Input {
   constructor(container) {
     this.container = container;
     this.state = { steer: 0, throttle: 0, brake: 0, handbrake: 0, clutch: 0 };
-    this.raw = { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false };
+    this.raw = { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false, droneFast: false };
     this.keys = new Set();
-    this.handlers = { gearUp: [], gearDown: [], camera: [], reset: [], pause: [] };
+    this.handlers = { gearUp: [], gearDown: [], camera: [], reset: [], pause: [], drone: [], droneExit: [], hudToggle: [] };
+    this.hudHidden = false; // drone mode: everything but the HUD toggle is hidden
+    this.onLook = null; // (dx, dy) radians while dragging empty screen space
+    this.onLookHeld = null; // (held) when that drag starts / ends
+    this.mode = 'drive'; // 'drive' | 'drone'
     this.editMode = false;
     this.onSelect = null;
     this.elements = {};
     this.buildTouch();
     this.bindKeyboard();
+    this.bindLook();
     this.prevPad = {};
     settings.onChange((path) => { if (path.startsWith('hud') || path.startsWith('driving')) this.layout(); });
     addEventListener('resize', () => this.layout());
+    this.layout();
+  }
+
+  setMode(mode) {
+    this.mode = mode;
+    this.hudHidden = false;
+    this.release();
     this.layout();
   }
 
@@ -53,12 +69,17 @@ export class Input {
     root.className = 'touch-controls';
     this.container.appendChild(root);
     this.root = root;
-    for (const id of Object.keys(settings.data.hud.layout)) {
+    // Saved layouts from older versions lack newer controls: fill them from the defaults.
+    const layout = settings.data.hud.layout;
+    for (const [id, def] of Object.entries(DEFAULT_HUD_LAYOUT)) if (!layout[id]) layout[id] = { ...def };
+    for (const id of Object.keys(DEFAULT_HUD_LAYOUT)) {
       const el = document.createElement('div');
       el.className = `ctl ctl-${id}`;
       el.dataset.id = id;
       if (id === 'wheel') {
         el.innerHTML = `<div class="wheel-rot">${WHEEL_SVG}</div>`;
+      } else if (id === 'droneStick') {
+        el.innerHTML = '<div class="stick-knob"></div>';
       } else if (['throttle', 'brake', 'handbrake', 'clutch'].includes(id)) {
         el.innerHTML = PEDAL_SVG(LABELS[id]) + '<div class="pedal-fill"></div>';
       } else {
@@ -111,6 +132,10 @@ export class Input {
         case 'brake': this.raw.brake = depth(e); break;
         case 'handbrake': this.raw.handbrake = true; break;
         case 'clutch': this.raw.clutch = true; break;
+        case 'droneStick': this.stick(el, e); break;
+        case 'droneUp': this.raw.droneUp = true; break;
+        case 'droneDown': this.raw.droneDown = true; break;
+        case 'droneFast': this.raw.droneFast = !this.raw.droneFast; el.classList.toggle('on', this.raw.droneFast); break;
         default: this.emit(id);
       }
     });
@@ -136,6 +161,7 @@ export class Input {
         this.raw.wheelAngle = Math.min(range / 2, Math.max(-range / 2, this.raw.wheelAngle + d));
       } else if (id === 'throttle') this.raw.throttle = depth(e);
       else if (id === 'brake') this.raw.brake = depth(e);
+      else if (id === 'droneStick') this.stick(el, e);
     });
     const end = (e) => {
       if (e.pointerId !== pointerId) return;
@@ -154,6 +180,9 @@ export class Input {
         case 'brake': this.raw.brake = 0; break;
         case 'handbrake': this.raw.handbrake = false; break;
         case 'clutch': this.raw.clutch = false; break;
+        case 'droneStick': this.stick(el, null); break;
+        case 'droneUp': this.raw.droneUp = false; break;
+        case 'droneDown': this.raw.droneDown = false; break;
       }
     };
     el.addEventListener('pointerup', end);
@@ -186,6 +215,9 @@ export class Input {
     this.root.style.display = this.touchVisible() || this.editMode ? '' : 'none';
     this.root.style.setProperty('--hud-opacity', d.hud.opacity);
     this.root.classList.toggle('editing', this.editMode);
+    const tog = this.elements.hudToggle;
+    tog.classList.toggle('on', this.hudHidden);
+    tog.firstChild.textContent = this.hudHidden ? 'SHOW HUD' : LABELS.hudToggle;
     const manual = d.driving.transmission === 'manual';
     const visible = {
       wheel: d.driving.steeringType === 'wheel',
@@ -195,11 +227,49 @@ export class Input {
       gearDown: manual,
       clutch: manual && d.driving.clutchPedal,
     };
+    const drone = this.mode === 'drone';
     for (const id of Object.keys(this.elements)) {
       if (!settings.data.hud.layout[id]) settings.data.hud.layout[id] = { x: 50, y: 50, size: 60 };
       this.place(id);
-      this.elements[id].style.display = visible[id] === false ? 'none' : '';
+      const show = this.editMode
+        ? true
+        : visible[id] !== false && !(drone && DRIVE_ONLY.includes(id)) && !(!drone && DRONE_ONLY.includes(id))
+          && !(this.hudHidden && id !== 'hudToggle');
+      this.elements[id].style.display = show ? '' : 'none';
     }
+  }
+
+  /** Virtual joystick: offset of the finger from the stick centre, -1..1 on each axis. */
+  stick(el, e) {
+    const knob = el.firstChild;
+    if (!e) {
+      this.raw.stickX = this.raw.stickY = 0;
+      knob.style.transform = '';
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    let x = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
+    let y = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+    const len = Math.hypot(x, y);
+    if (len > 1) { x /= len; y /= len; }
+    this.raw.stickX = x;
+    this.raw.stickY = y;
+    knob.style.transform = `translate(${x * r.width * 0.32}px, ${y * r.height * 0.32}px)`;
+  }
+
+  /** Drone flight input from touch stick/buttons and keyboard (WASD / arrows, R/F or Space/C for altitude). */
+  droneInput() {
+    const k = this.keys;
+    const kx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    const kz = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+    const ky = (this.raw.droneUp || k.has('Space') || k.has('KeyR') ? 1 : 0) - (this.raw.droneDown || k.has('KeyF') || k.has('ControlLeft') ? 1 : 0);
+    const dead = (v) => (Math.abs(v) < 0.12 ? 0 : v);
+    return {
+      right: Math.max(-1, Math.min(1, dead(this.raw.stickX) + kx)),
+      forward: Math.max(-1, Math.min(1, -dead(this.raw.stickY) + kz)),
+      up: ky,
+      fast: this.raw.droneFast || k.has('ShiftLeft') || k.has('ShiftRight'),
+    };
   }
 
   setEditMode(on, onSelect) {
@@ -210,7 +280,9 @@ export class Input {
 
   /** Bring pedals/steering back to rest (e.g. when pausing). */
   release() {
-    Object.assign(this.raw, { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false });
+    Object.assign(this.raw, { wheelAngle: 0, wheelHeld: false, left: false, right: false, throttle: 0, brake: 0, handbrake: false, clutch: false, stickX: 0, stickY: 0, droneUp: false, droneDown: false });
+    const knob = this.elements.droneStick?.firstChild;
+    if (knob) knob.style.transform = '';
     Object.assign(this.state, { steer: 0, throttle: 0, brake: 0, handbrake: 0, clutch: 0 });
     this.keys.clear();
   }
@@ -221,12 +293,44 @@ export class Input {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
       if (e.repeat) return;
       this.keys.add(e.code);
-      const map = { KeyE: 'gearUp', ShiftRight: 'gearUp', ShiftLeft: 'gearUp', KeyQ: 'gearDown', ControlLeft: 'gearDown', ControlRight: 'gearDown', KeyC: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause' };
+      // Drone flight reuses Shift/Ctrl/R/Space, so it gets its own small action map.
+      const map = this.mode === 'drone'
+        ? { KeyV: 'droneExit', KeyH: 'hudToggle', Escape: 'pause', KeyP: 'pause' }
+        : { KeyE: 'gearUp', ShiftRight: 'gearUp', ShiftLeft: 'gearUp', KeyQ: 'gearDown', ControlLeft: 'gearDown', ControlRight: 'gearDown', KeyC: 'camera', KeyR: 'reset', KeyV: 'drone', Escape: 'pause', KeyP: 'pause' };
       if (map[e.code]) this.emit(map[e.code]);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
+  }
+
+  // Dragging anywhere that is not a control (touch or mouse) looks around.
+  bindLook() {
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return;
+    let id = null, lx = 0, ly = 0;
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('pointerdown', (e) => {
+      if (id !== null || this.editMode) return;
+      id = e.pointerId; lx = e.clientX; ly = e.clientY;
+      canvas.setPointerCapture(id);
+      this.onLookHeld?.(true);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id) return;
+      // A full screen-height swipe turns the view about 180 degrees.
+      const k = Math.PI / Math.max(300, innerHeight);
+      this.onLook?.((e.clientX - lx) * k, (e.clientY - ly) * k);
+      lx = e.clientX; ly = e.clientY;
+    });
+    const end = (e) => {
+      if (e.pointerId !== id) return;
+      id = null;
+      this.onLookHeld?.(false);
+    };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('lostpointercapture', end);
   }
 
   // ---------------- per-frame update ----------------

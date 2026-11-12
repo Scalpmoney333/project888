@@ -69,16 +69,22 @@ input[type='checkbox'] { width: 24px; height: 24px; accent-color: var(--accent2)
 
 /* ---------- HUD ---------- */
 .hud { position: fixed; inset: 0; pointer-events: none !important; }
-.gauge { position: absolute; left: 50%; top: max(2px, env(safe-area-inset-top)); transform: translateX(-50%) scale(var(--gauge-scale, 1)); transform-origin: top center; }
+.gauge { position: absolute; left: max(4px, env(safe-area-inset-left)); top: max(2px, env(safe-area-inset-top)); transform: scale(var(--gauge-scale, 1)); transform-origin: top left; }
 .gauge canvas { width: 200px; height: 115px; }
 @media (min-height: 500px) { .gauge canvas { width: 240px; height: 138px; } }
-.score { position: absolute; left: 50%; top: 125px; transform: translateX(-50%); text-align: center; text-shadow: 0 2px 6px #000; }
+.score { position: absolute; left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); text-align: center; text-shadow: 0 2px 6px #000; }
+.hud.hud-off > * { display: none; }
+.hud.hud-off > .toast { display: block; }
+.ctl-hudToggle.on { opacity: 0.35; font-size: 10px !important; }
+.ctl-droneFast.on { background: rgba(255, 140, 30, 0.6); border-color: var(--accent); }
+.ctl-droneStick { background: rgba(20, 22, 26, 0.35); }
+.ctl-droneStick .stick-knob { width: 42%; height: 42%; border-radius: 50%; background: rgba(255, 255, 255, 0.55); pointer-events: none; }
 .score b { display: block; font-size: 26px; color: var(--accent); font-style: italic; }
 .score small { font-size: 12px; color: #ddd; }
-.fps { position: absolute; left: max(8px, env(safe-area-inset-left)); top: 6px; font-size: 11px; color: #9f9; text-shadow: 0 1px 2px #000; }
+.fps { position: absolute; right: max(8px, env(safe-area-inset-right)); bottom: 4px; font-size: 11px; color: #9f9; text-shadow: 0 1px 2px #000; }
 .toast { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 8px 16px; background: rgba(0, 0, 0, 0.6); border-radius: 8px; opacity: 0; transition: opacity 0.25s; }
 .toast.show { opacity: 1; }
-.telemetry { position: absolute; left: 8px; top: 24px; margin: 0; font: 11px/1.35 ui-monospace, monospace; color: #dfe; background: rgba(0, 0, 0, 0.45); padding: 6px; border-radius: 6px; }
+.telemetry { position: absolute; left: 8px; top: 150px; margin: 0; font: 11px/1.35 ui-monospace, monospace; color: #dfe; background: rgba(0, 0, 0, 0.45); padding: 6px; border-radius: 6px; }
 
 /* ---------- touch controls ---------- */
 .touch-controls { position: fixed; inset: 0; pointer-events: none !important; --hud-opacity: 0.7; }

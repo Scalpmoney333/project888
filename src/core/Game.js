@@ -13,6 +13,7 @@ import { getVehicle, buildSpec } from '../vehicle/specs.js';
 import { CarModel } from '../vehicle/CarModel.js';
 import { MAPS, loadMap } from '../world/maps.js';
 import { CameraRig } from '../camera/CameraRig.js';
+import { DroneCamera } from '../camera/Drone.js';
 import { Input } from '../input/Input.js';
 import { AudioEngine } from '../audio/AudioEngine.js';
 import { SmokeSystem, SkidMarks, ExhaustFlames } from '../fx/Effects.js';
@@ -26,6 +27,8 @@ const smooth = (a, b, x) => {
 const _v = new THREE.Vector3();
 const _side = new THREE.Vector3();
 const DUST_BROWN = [0.48, 0.4, 0.3];
+const PARKED = { steer: 0, throttle: 0, brake: 0, handbrake: 1, clutch: 0 };
+const DRONE_IDLE = { forward: 0, right: 0, up: 0, fast: false };
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -90,6 +93,15 @@ export class Game {
     this.input.on('gearUp', () => this.shift(1));
     this.input.on('gearDown', () => this.shift(-1));
     this.input.on('pause', () => this.emit('pause'));
+    this.input.on('drone', () => this.setDrone(true));
+    this.input.on('droneExit', () => this.setDrone(false));
+    this.input.on('hudToggle', () => this.setHudHidden(!this.input.hudHidden));
+    // Drag on empty screen: free look while driving (eases back after release), aim in drone mode.
+    this.input.onLook = (dx, dy) => {
+      if (this.drone?.active) this.drone.look(dx, -dy);
+      else this.cameraRig?.lookBy(-dx, dy);
+    };
+    this.input.onLookHeld = (held) => this.cameraRig?.setLookHeld(held);
 
     settings.onChange((path) => this.onSettings(path));
     addEventListener('resize', () => this.resize());
@@ -147,7 +159,12 @@ export class Game {
     if (path.startsWith('assists') && this.vehicle) Object.assign(this.vehicle.assists, settings.data.assists);
     if (path.startsWith('driving') && this.vehicle) this.applyDriving();
     if (path.startsWith('tuning') && this.vehicle) this.applyTuning();
-    if (path.startsWith('paint') && this.model) this.model.setPaint(settings.data.paint[this.carDef.id] || null);
+    if (path.startsWith('paint') && this.model) this.model.setPaint(this.paintFor(this.carDef));
+  }
+
+  /** Chosen repaint, else the car's factory colour (null keeps the model's own materials). */
+  paintFor(def) {
+    return settings.data.paint[def.id] || def.defaultPaint || null;
   }
 
   applyDriving() {
@@ -170,6 +187,7 @@ export class Game {
   // ---------------- session ----------------
   async loadSession(carId, mapId, onProgress = () => {}) {
     this.paused = true;
+    this.setDrone(false);
     const mapDef = MAPS.find((m) => m.id === mapId) || MAPS[0];
     const carDef = getVehicle(carId);
     const quality = this.gfx.preset;
@@ -196,6 +214,7 @@ export class Game {
       this.camera.updateProjectionMatrix();
       this.sky.scale.setScalar(map.far * 0.9);
       this.cameraRig = new CameraRig(this.camera, this.world);
+      this.drone = new DroneCamera(this.camera, this.world);
     }
 
     if (!this.model || this.carDef.id !== carDef.id) {
@@ -206,8 +225,7 @@ export class Game {
       if (this.model) { this.scene.remove(this.model.root); this.model.dispose(); }
       this.model = new CarModel(gltf, carDef, quality);
       this.carDef = carDef;
-      const paint = settings.data.paint[carDef.id];
-      if (paint) this.model.setPaint(paint);
+      this.model.setPaint(this.paintFor(carDef));
       this.scene.add(this.model.root);
       this.flames = new ExhaustFlames(this.model.body, this.model.exhausts);
     }
@@ -259,6 +277,22 @@ export class Game {
     if (p) { this.input.release(); this.audio.suspend(); } else { this.audio.init(); this.audio.resume(); }
   }
 
+  /** Free-flying drone camera; the car is parked with the handbrake while it is active. */
+  setDrone(on) {
+    if (!this.drone || on === this.drone.active) return;
+    if (on) this.drone.start();
+    else { this.drone.stop(); this.cameraRig.snap(); }
+    this.input.setMode(on ? 'drone' : 'drive');
+    this.emit('hud', false);
+    this.emit('drone', on);
+  }
+
+  setHudHidden(hidden) {
+    this.input.hudHidden = hidden;
+    this.input.layout();
+    this.emit('hud', hidden);
+  }
+
   // ---------------- frame ----------------
   frame() {
     const now = performance.now();
@@ -274,7 +308,7 @@ export class Game {
 
   simulate(dt) {
     const v = this.vehicle;
-    const inp = this.input.update(dt);
+    const inp = this.drone.active ? PARKED : this.input.update(dt);
     const c = v.controls;
     c.steer = inp.steer;
     c.throttle = inp.throttle;
@@ -360,7 +394,8 @@ export class Game {
     const v = this.vehicle;
     const braking = v.controls.brake > 0.1 || (v.transmission === 'auto' && v.gear === -1 && v.controls.throttle > 0.1);
     this.model.update(v, braking);
-    this.cameraRig.update(dt, v, this.model);
+    if (this.drone.active) this.drone.update(dt, this.paused ? DRONE_IDLE : this.input.droneInput());
+    else this.cameraRig.update(dt, v, this.model);
     this.sky.position.copy(this.camera.position);
 
     // sun + shadow follow the car
