@@ -7,3 +7,5 @@ test-output/
 dist-single/
 android/build/
 android/debug.keystore
+__pycache__/
+*.pyc
