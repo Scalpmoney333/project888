@@ -29,7 +29,7 @@ locally generated key (`android/debug.keystore`, not committed), so Android asks
 installs from unknown sources. A rebuild on another machine has a different key and must be
 installed after uninstalling the old app.
 
-The single HTML file still works from a phone's storage, but with six cars and seven maps it
+The single HTML file still works from a phone's storage, but with seven cars and eight maps it
 is large; the APK is the recommended way to play on a phone.
 
 ## Controls
@@ -42,10 +42,21 @@ is large; the APK is the recommended way to play on a phone.
 | ▲ ▼ gears, CLUTCH (manual only) | E / Q, X clutch | RB / LB, X |
 | CAM, ⟲ reset to start, Ⅱ pause | C, R, Esc | Y, Back, Start |
 | DRONE (free camera: stick to fly, ▲ ▼ altitude, FOV − / FOV + zoom, FAST, HIDE HUD, EXIT); drag the screen to look around | V, then WASD, R/F, -/=, Shift, H, V | — |
+| LIGHTS (night only: headlights on/off) | L | — |
 
 All touch controls track their own pointer, so steering, throttle and handbrake work at the
 same time. Every control can be moved and resized (Settings → HUD → Edit), and all settings are
 stored in `localStorage`.
+
+## Time of day and fitment
+
+The main menu picks **Morning**, **Day** (the original lighting) or **Night** (bright moonlight;
+a LIGHTS button switches the car's headlights). Presets live in `src/world/timeOfDay.js`.
+
+**Fitment** (main menu, pause menu or the Settings tab) sets front/rear wheel offset, front/rear
+camber and ride height per car, previewed live on the car and saved; "Reset fitment to stock"
+restores the original. Offset and ride height change the physics (track width, CG height,
+underbody clearance); camber is visual.
 
 ## Project layout
 
