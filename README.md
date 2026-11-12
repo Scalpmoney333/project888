@@ -11,33 +11,33 @@ npm test           # headless physics acceptance tests (Node)
 ```
 
 Browser checks (need `npm run build && npm run preview` running, plus Chrome):
-`npm run test:browser` (both maps, both cars, wheel pivots, CDP multitouch, all cameras) and
+`npm run test:browser` (all maps and cars, start positions, wheel pivots, multitouch, cameras) and
 `npm run test:ui` (menus, settings, manual gearbox buttons, HUD editor, persistence).
 Screenshots go to `test-output/`.
 
-## Single HTML file and Android APK
+## Android APK (and single HTML file)
 
 ```bash
-npm run build:single   # dist-single/touge-drift.html (~23 MB, everything embedded)
 npm run build:apk      # dist-single/touge-drift.apk (needs JDK 17 + Android SDK, see tools/build-apk.sh)
+npm run build:single   # dist-single/touge-drift.html (everything embedded as base64, ~60 MB)
 ```
 
-The HTML file has the code, both cars and the Nagao map embedded as base64 (decoded to Blob
-URLs on demand), so it opens straight from a phone's storage in Chrome with no server. The 4K
-Nagao atlas is left out to keep the size down; the 2K atlas is used instead.
+The APK is a fullscreen landscape WebView (`android/`) that serves the normal web build
+(`dist/`) from its assets through a virtual `https://appassets.androidplatform.net` origin, so
+cars and maps load on demand. The Android back button pauses the game. It is signed with a
+locally generated key (`android/debug.keystore`, not committed), so Android asks to allow
+installs from unknown sources. A rebuild on another machine has a different key and must be
+installed after uninstalling the old app.
 
-The APK is a fullscreen landscape WebView (`android/`) that loads the same HTML from its
-assets. The Android back button pauses the game. It is signed with a locally generated key
-(`android/debug.keystore`, not committed), so Android asks to allow installs from unknown
-sources. Rebuilding on another machine creates a new key, and Android won't install that APK
-over the old one until you uninstall the old one.
+The single HTML file still works from a phone's storage, but with five cars and four maps it
+is large; the APK is the recommended way to play on a phone.
 
 ## Controls
 
 | Touch (landscape) | Keyboard | Gamepad |
 | --- | --- | --- |
-| Steering wheel (left) or ◀ ▶ arrows | A/D or ←/→ | Left stick |
-| GAS / BRAKE pedals — press higher on the pedal for more | W/S or ↑/↓ | RT / LT |
+| Steering wheel (left, one full turn each way) or ◀ ▶ arrows | A/D or ←/→ | Left stick |
+| GAS / BRAKE pedals — proportional (press higher for more) or regular on/off | W/S or ↑/↓ | RT / LT |
 | E-BRAKE | Space | A / B |
 | ▲ ▼ gears, CLUTCH (manual only) | E / Q, X clutch | RB / LB, X |
 | CAM, ⟲ reset to start, Ⅱ pause | C, R, Esc | Y, Back, Start |
@@ -53,7 +53,7 @@ src/physics/    Vehicle.js (rigid body, suspension, wheel spin solve, assists, c
                 Tire.js (combined-slip Pacejka on a friction ellipse), Drivetrain.js (engine,
                 clutch, AT/MT gearbox), CollisionWorld.js (three-mesh-bvh), surfaces.js
 src/vehicle/    specs.js (per-car handling + tuning ranges), CarModel.js (GLB -> wheel rig)
-src/world/      NagaoMap.js, ForestTrack.js, textures.js
+src/world/      maps.js (map list + loader for converted maps), textures.js
 src/camera/     CameraRig.js (chase, close chase, cinematic drift, hood, cockpit)
 src/input/      Input.js (touch HUD, keyboard, gamepad)
 src/fx/         Effects.js (pooled smoke/dust, skid marks, exhaust flames)
@@ -70,26 +70,28 @@ behaves the same at 30, 60 or 144 FPS.
 
 ## Assets
 
-* **Cars** — `public/assets/cars/*.glb` are the uploaded Sketchfab files, unmodified. At load
-  time `CarModel` bakes the node transforms, finds the four wheels (splitting merged meshes into
-  connected components for the Chaser, whose rims are one mesh per axle and whose tyres share a
-  mesh with body parts), builds `wheelRoot → steer → spin` pivots at each hub, and scales the
+* **Cars** — the uploaded Sketchfab files are kept unmodified in `assets-src/cars/`.
+  `tools/optimize-car.mjs` writes the runtime copies in `public/assets/cars/` (textures resized
+  to ≤1024 px and re-encoded as WebP; geometry untouched). At load time `CarModel` bakes the node
+  transforms, turns models authored facing another axis (Mark II, 240SX), finds the four wheels
+  (by node list or name/material pattern, splitting meshes that hold several wheels into
+  connected components), builds `wheelRoot → steer → spin` pivots at each hub, and scales the
   model so its wheelbase matches the real car. Brake calipers steer but do not spin.
-* **Nagao Touge** — from `Nagao map mod 0.4.9.zip` (a Unity 2022.3 `sharedassets` file). Only
-  the world mesh `default_0` (617k vertices) and its atlas have usable data; the file has no
-  scene transforms for the few small props, and 138 other mesh entries are empty stubs.
-  `tools/convert_nagao.py` converts it (Unity left-handed Z-up → glTF), splits it into 500 m
-  tiles for culling, writes 4K/2K atlases and a grip lookup (tarmac / grass / concrete), and
-  `tools/compress-glb.mjs` applies meshopt compression (24 MB → 5.3 MB):
+* **Maps** — Nagao, Oi Wharf, Tsukuba Winter and Ashinoko come from the uploaded Unity map mods
+  (`sharedassets18.assets.split0`). Their world meshes carry no scene transforms, so they are
+  converted as-is (Unity left-handed Z-up → glTF) by `tools/convert_unity_map.py`, configured
+  in `tools/maps.json` (which meshes collide, grip per mesh or from the atlas colour, foliage).
+  The converter tiles the geometry for culling, writes the atlas and finds the longest road to
+  place two start points (Uphill/Downhill when the ends differ by more than 80 m).
+  `tools/compress-glb.mjs` then applies meshopt compression:
 
   ```bash
   python3 -m venv venv && venv/bin/pip install UnityPy numpy pillow
-  venv/bin/python tools/convert_nagao.py "<path>/sharedassets18.assets.split0" out/
-  node tools/compress-glb.mjs out/nagao_raw.glb public/assets/maps/nagao/nagao.glb
+  venv/bin/python tools/convert_unity_map.py nagao "<folder with the extracted zip>" out/
+  node tools/compress-glb.mjs out/nagao.raw.glb public/assets/maps/nagao.glb
+  cp out/nagao.json out/nagao.jpg public/assets/maps/
   ```
-* **Forest Loop Raceway** — the uploaded `race_track__forest_loop_raceway.glb` contains no
-  track geometry, only Sketchfab's placeholder image plane. The circuit is therefore generated
-  procedurally (`ForestTrack.js`) in the style of that preview. Replace it with the real model
-  when available.
+
+  The Forest Loop Raceway was removed: its uploaded file had no track geometry.
 
 Make sure you have the rights to redistribute the uploaded models and map before publishing.

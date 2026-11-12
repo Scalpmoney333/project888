@@ -96,7 +96,20 @@ export class CarModel {
     this.def = def;
     const cfg = def.model;
     const scene = gltf.scene;
+    // Models authored facing another axis are turned so the front points to +Z.
+    if (cfg.yaw) scene.rotation.y = (cfg.yaw * Math.PI) / 180;
     scene.updateMatrixWorld(true);
+    const wheelRe = cfg.wheelMatch ? new RegExp(cfg.wheelMatch, 'i') : null;
+    const isWheel = (o) => {
+      if (cfg.wheelNodes) return hasAncestorNamed(o, cfg.wheelNodes);
+      for (let p = o; p; p = p.parent) if (wheelRe.test(p.name)) return true;
+      return wheelRe.test(o.material?.name || '');
+    };
+    const round = (box) => {
+      const s = box.getSize(new THREE.Vector3());
+      const d = Math.max(s.y, s.z);
+      return d > 0 && Math.abs(s.y - s.z) / d < 0.2 && s.x < d * 0.8;
+    };
 
     const bodyParts = []; // {geometry, material}
     const wheelComps = []; // {geometry, material, box}
@@ -110,7 +123,7 @@ export class CarModel {
         if (idx) for (let i = 0; i < idx.count; i += 3) { const a = idx.getX(i + 1); idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, a); }
       }
       const material = adaptMaterial(o.material, quality);
-      if (hasAncestorNamed(o, cfg.wheelNodes)) {
+      if (isWheel(o)) {
         const comps = cfg.splitWheelMeshes ? connectedComponents(geom).map((t) => extractTriangles(geom, t)) : [geom];
         for (const g of comps) {
           g.computeBoundingBox();
@@ -121,11 +134,13 @@ export class CarModel {
       }
     });
 
-    // Car centre line from the body; axle split from the wheel components.
-    const bodyBox = new THREE.Box3();
-    for (const p of bodyParts) { p.geometry.computeBoundingBox(); bodyBox.union(p.geometry.boundingBox); }
+    // Axle split from the large round wheel parts only (tyres, rims), so small badges or
+    // body bits caught by the wheel pattern cannot shift the centre.
+    for (const c of wheelComps) c.size = c.box.getSize(new THREE.Vector3()).length();
+    const roundSizes = wheelComps.filter((c) => round(c.box)).map((c) => c.size);
+    const maxRound = Math.max(...roundSizes);
     const wheelBox = new THREE.Box3();
-    for (const c of wheelComps) wheelBox.union(c.box);
+    for (const c of wheelComps) if (round(c.box) && c.size > maxRound * 0.6) wheelBox.union(c.box);
     const cx = (wheelBox.min.x + wheelBox.max.x) / 2;
     const cz = (wheelBox.min.z + wheelBox.max.z) / 2;
 
@@ -136,18 +151,12 @@ export class CarModel {
     ];
     for (const c of wheelComps) {
       c.box.getCenter(c.center = new THREE.Vector3());
-      c.size = c.box.getSize(new THREE.Vector3()).length();
       c.corner = (c.center.z > cz ? 0 : 2) + (c.center.x > cx ? 0 : 1);
     }
     for (let i = 0; i < 4; i++) {
       // Tyre = largest component that is round in side view (Y ≈ Z) and narrow; stray body
       // bits merged into wheel meshes are not round, so they cannot become the hub.
-      const mine = wheelComps.filter((c) => {
-        if (c.corner !== i) return false;
-        const s = c.box.getSize(new THREE.Vector3());
-        const d = Math.max(s.y, s.z);
-        return Math.abs(s.y - s.z) / d < 0.2 && s.x < d * 0.8;
-      });
+      const mine = wheelComps.filter((c) => c.corner === i && round(c.box));
       const tyre = mine.reduce((a, b) => (b.size > (a?.size ?? 0) ? b : a), null);
       if (!tyre) throw new Error(`${def.id}: wheel ${i} not found`);
       const s = tyre.box.getSize(new THREE.Vector3());
@@ -188,7 +197,7 @@ export class CarModel {
     this.body = new THREE.Group(); // model space offset from the CG
     this.root.add(this.body);
     this.brakeLightMaterials = [];
-    const brakeRe = /rear_light|red|tail/i;
+    const brakeRe = new RegExp(cfg.brakeLightMaterial || 'rear_light|red|tail', 'i');
     const materialCache = new Map();
     for (const p of bodyParts) {
       let mat = p.material;
@@ -208,6 +217,7 @@ export class CarModel {
       this.body.add(mesh);
     }
     const nonSpin = cfg.nonSpinMaterials || [];
+    const nonSpinRe = cfg.nonSpinMatch ? new RegExp(cfg.nonSpinMatch, 'i') : null;
     this.wheels = corners.map((c, i) => {
       const wheelRoot = new THREE.Group();
       const steer = new THREE.Group();
@@ -217,7 +227,8 @@ export class CarModel {
       for (const p of c.parts) {
         const mesh = new THREE.Mesh(p.geometry, p.material);
         mesh.castShadow = true;
-        (nonSpin.includes(p.material.name) ? steer : spin).add(mesh);
+        const fixed = nonSpin.includes(p.material.name) || (nonSpinRe && nonSpinRe.test(p.material.name || ''));
+        (fixed ? steer : spin).add(mesh);
       }
       wheelRoot.name = ['wheel_FL', 'wheel_FR', 'wheel_RL', 'wheel_RR'][i];
       this.root.add(wheelRoot);
@@ -248,7 +259,7 @@ export class CarModel {
     this.rearZ = box.min.z;
     this.exhausts = [];
     for (const m of this.body.children) {
-      if (cfg.exhaustMaterial && m.material.name === cfg.exhaustMaterial) {
+      if (cfg.exhaustMaterial && new RegExp(cfg.exhaustMaterial, 'i').test(m.material.name || '')) {
         const b = m.geometry.boundingBox;
         this.exhausts.push(new THREE.Vector3((b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2, b.min.z));
       }
@@ -264,7 +275,7 @@ export class CarModel {
 
   setPaint(color) {
     for (const m of this.body.children) {
-      if (m.material.name !== this.def.model.paintMaterial) continue;
+      if (!new RegExp(this.def.model.paintMaterial, 'i').test(m.material.name || '')) continue;
       m.material.userData.origColor ??= m.material.color.clone();
       if (color) m.material.color.set(color);
       else m.material.color.copy(m.material.userData.origColor);

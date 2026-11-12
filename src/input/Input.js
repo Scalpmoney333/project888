@@ -1,7 +1,7 @@
 // Touch HUD, keyboard and gamepad input. Every control tracks its own pointerId with pointer
 // capture, so steering, throttle and handbrake work simultaneously on multitouch screens.
 
-import { settings } from '../core/settings.js';
+import { settings, vibrate } from '../core/settings.js';
 
 const WHEEL_SVG = `
 <svg viewBox="-100 -100 200 200" xmlns="http://www.w3.org/2000/svg">
@@ -79,7 +79,9 @@ export class Input {
       return [r.left + r.width / 2, r.top + r.height / 2, r];
     };
     const depth = (e) => {
-      // Progressive pedal: pressing higher on the pedal = deeper.
+      // Regular pedals are simply on/off.
+      if (settings.data.driving.pedals === 'regular') return 1;
+      // Proportional pedal: pressing higher on the pedal = deeper.
       const [, , r] = center();
       const f = 1 - (e.clientY - r.top) / r.height;
       return Math.min(1, Math.max(0.35, 0.35 + f * 0.9));
@@ -95,7 +97,7 @@ export class Input {
         this.onSelect?.(id);
         return;
       }
-      if (navigator.vibrate && id !== 'wheel') navigator.vibrate(8);
+      if (id !== 'wheel') vibrate(8);
       switch (id) {
         case 'wheel': {
           const [cx, cy] = center();
@@ -246,7 +248,7 @@ export class Input {
     if (target === null && d.steeringType === 'wheel' && (this.raw.wheelHeld || Math.abs(this.raw.wheelAngle) > 1e-3)) {
       if (!this.raw.wheelHeld) {
         // Natural centre return of the virtual wheel.
-        const r = (Math.PI * 3 * ret) * dt;
+        const r = (Math.PI * 4 * ret) * dt; // ~720 deg/s: full lock returns in about half a second
         this.raw.wheelAngle = Math.abs(this.raw.wheelAngle) <= r ? 0 : this.raw.wheelAngle - Math.sign(this.raw.wheelAngle) * r;
       }
       const range = (d.wheelRange * Math.PI) / 180;
@@ -267,8 +269,10 @@ export class Input {
     const ramp = (cur, want, up, down) => cur + Math.max(-down * dt, Math.min(up * dt, want - cur));
     const thrWant = Math.max(this.raw.throttle, kUp ? 1 : 0, pad ? pad.throttle : 0);
     const brkWant = Math.max(this.raw.brake, kDown ? 1 : 0, pad ? pad.brake : 0);
-    s.throttle = ramp(s.throttle, thrWant, 5, 9);
-    s.brake = ramp(s.brake, brkWant, 6, 7);
+    // Regular pedals snap on/off almost instantly; proportional ones ease toward the depth.
+    const fast = d.pedals === 'regular';
+    s.throttle = ramp(s.throttle, thrWant, fast ? 14 : 5, fast ? 16 : 9);
+    s.brake = ramp(s.brake, brkWant, fast ? 14 : 6, fast ? 16 : 7);
     const hb = this.raw.handbrake || k.has('Space') || (pad && pad.handbrake);
     s.handbrake = ramp(s.handbrake, hb ? 1 : 0, 25, 8);
     const cl = this.raw.clutch || k.has('KeyX') || (pad && pad.clutch);

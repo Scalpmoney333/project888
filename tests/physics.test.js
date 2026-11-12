@@ -5,9 +5,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeCar, drive, deg, upright } from './helpers.js';
+import { chassisMetrics } from './chassis.mjs';
 
-const CARS = ['skyline', 'chaser'];
+const CARS = ['skyline', 'chaser', 'markii', 's15', 's13'];
 const neutral = { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
+
+// Body control: no car may roll or wobble like the original loose Chaser setup did
+// (3.3 deg roll with 75% overshoot in this manoeuvre).
+for (const id of CARS) {
+  test(`${id}: chassis is planted (limited roll, little overshoot)`, () => {
+    const m = chassisMetrics(id);
+    assert.ok(m.rollPeakDeg < 2.5, `roll ${m.rollPeakDeg} deg`);
+    assert.ok(m.rollOvershoot < 0.6, `overshoot ${m.rollOvershoot}`);
+    assert.ok(m.rollAfterRelease.crossings <= 3, `oscillation ${m.rollAfterRelease.crossings}`);
+  });
+}
 
 /** Reach a steady speed (km/h) in a straight line. */
 function cruise(car, kmh) {

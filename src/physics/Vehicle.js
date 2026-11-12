@@ -21,6 +21,7 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _q1 = new THREE.Quaternion();
+const _e = new THREE.Euler();
 const _qInv = new THREE.Quaternion();
 const _tireOut = { fx: 0, fy: 0, rho: 0, usage: 0 };
 const _dtOut = { torque: 0, inertia: 0, locked: false };
@@ -164,12 +165,28 @@ export class Vehicle {
 
   /** Place the car at rest with wheels on the ground below `pos`. */
   reset(pos, yaw) {
-    this.quaternion.setFromAxisAngle(_v1.set(0, 1, 0), yaw);
-    // Find ground under the requested point.
-    let groundY = pos.y;
-    _v2.set(pos.x, pos.y + 30, pos.z);
-    if (this.world.raycast(_v2, _v3.set(0, -1, 0), 200, _hit)) groundY = _v2.y - _hit.distance;
-    this.position.set(pos.x, groundY + this.spec.cgHeight + 0.03, pos.z);
+    // Sit the car on the ground plane under its four wheels, so spawning on a slope does not
+    // bury the nose or tail in the road. Rays start just above the spawn height, ignoring any
+    // overhang (rock, bridges) above the road.
+    const fwdX = Math.sin(yaw), fwdZ = Math.cos(yaw);
+    const leftX = fwdZ, leftZ = -fwdX;
+    const h = [];
+    for (const w of this.wheels) {
+      const x = pos.x + leftX * w.pos.x + fwdX * w.pos.z;
+      const z = pos.z + leftZ * w.pos.x + fwdZ * w.pos.z;
+      _v2.set(x, pos.y + 3, z);
+      h.push(this.world.raycast(_v2, _v3.set(0, -1, 0), 50, _hit) ? _v2.y - _hit.distance : pos.y);
+    }
+    const front = (h[0] + h[1]) / 2, rear = (h[2] + h[3]) / 2;
+    const left = (h[0] + h[2]) / 2, right = (h[1] + h[3]) / 2;
+    const pitch = -Math.atan2(front - rear, this.cgToFront + this.cgToRear);
+    const roll = Math.atan2(left - right, this.spec.trackFront);
+    this.quaternion.setFromEuler(_e.set(pitch, yaw, roll, 'YXZ'));
+    // Ground height under the CG, interpolated between the axles.
+    const k = this.cgToRear / (this.cgToFront + this.cgToRear);
+    const groundY = rear + (front - rear) * k;
+    _v1.set(0, 1, 0).applyQuaternion(this.quaternion);
+    this.position.set(pos.x, groundY, pos.z).addScaledVector(_v1, this.spec.cgHeight + 0.03);
     this.velocity.set(0, 0, 0);
     this.angularVelocity.set(0, 0, 0);
     this.prevPosition.copy(this.position);
@@ -262,6 +279,8 @@ export class Vehicle {
         throttle = c.brake;
         brake = c.throttle;
       }
+      // Hill hold: with no pedal input at a standstill the car does not roll down slopes.
+      if (throttle < 0.05 && brake < 0.05 && Math.abs(vF) < 0.4) brake = 0.35;
     }
 
     // ---------- steering ----------

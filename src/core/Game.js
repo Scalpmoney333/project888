@@ -5,23 +5,19 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { settings, resolveGraphics } from './settings.js';
+import { settings, resolveGraphics, vibrate } from './settings.js';
 import { assetUrl } from './assets.js';
 import { CollisionWorld } from '../physics/CollisionWorld.js';
 import { Vehicle } from '../physics/Vehicle.js';
 import { getVehicle, buildSpec } from '../vehicle/specs.js';
 import { CarModel } from '../vehicle/CarModel.js';
-import { loadNagao } from '../world/NagaoMap.js';
-import { buildForestTrack } from '../world/ForestTrack.js';
+import { MAPS, loadMap } from '../world/maps.js';
 import { CameraRig } from '../camera/CameraRig.js';
 import { Input } from '../input/Input.js';
 import { AudioEngine } from '../audio/AudioEngine.js';
 import { SmokeSystem, SkidMarks, ExhaustFlames } from '../fx/Effects.js';
 
-export const MAPS = [
-  { id: 'nagao', name: 'Nagao Touge', subtitle: 'Uploaded Nagao map mod 0.4.9 • ~5 km mountain pass', load: loadNagao },
-  { id: 'forest', name: 'Forest Loop Raceway', subtitle: 'Wet forest circuit • 2.5 km loop', load: buildForestTrack },
-];
+export { MAPS };
 
 const smooth = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -29,6 +25,7 @@ const smooth = (a, b, x) => {
 };
 const _v = new THREE.Vector3();
 const _side = new THREE.Vector3();
+const DUST_BROWN = [0.48, 0.4, 0.3];
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -181,7 +178,7 @@ export class Game {
       onProgress(0.05, 'Loading map…');
       if (this.map) { this.scene.remove(this.map.group); this.map.dispose(); }
       this.map = null;
-      const map = await mapDef.load({ renderer: this.renderer, quality, onProgress: (p) => onProgress(0.05 + p * 0.5, 'Loading map…') });
+      const map = await loadMap(mapDef, { renderer: this.renderer, quality, onProgress: (p) => onProgress(0.05 + p * 0.5, 'Loading map…') });
       onProgress(0.6, 'Building collision…');
       await new Promise((r) => setTimeout(r, 0));
       this.world = new CollisionWorld();
@@ -224,9 +221,21 @@ export class Game {
     this.emit('session', { car: carDef, map: mapDef });
   }
 
+  /** Spawn point chosen for the current map (Uphill/Downhill etc.). */
+  currentSpawn() {
+    const spawns = this.map.spawns;
+    const id = settings.data.spawn[this.map.id];
+    return spawns.find((s) => s.id === id) || spawns[0];
+  }
+
+  setSpawn(id) {
+    settings.set(`spawn.${this.map.id}`, id);
+    this.resetCar();
+  }
+
   resetCar() {
     if (!this.vehicle) return;
-    const s = this.map.spawn;
+    const s = this.currentSpawn();
     this.vehicle.reset(s.position, s.yaw);
     this.vehicle.drivetrain.spec.autoBlip = this.vehicle.transmission === 'auto';
     this.cameraRig.snap();
@@ -286,7 +295,7 @@ export class Game {
       const s = v.impact / 9000;
       this.audio.impact(s);
       this.cameraRig.addTrauma(Math.min(0.8, s));
-      if (navigator.vibrate) navigator.vibrate(Math.min(80, 20 + s * 80));
+      vibrate(Math.min(80, 20 + s * 80));
       this.score.current = 0;
       this.score.combo = 1;
     }
@@ -383,7 +392,8 @@ export class Game {
               const shade = 0.82 + Math.random() * 0.12;
               this.smoke.emit(p.x + r() * 0.3, p.y + 0.25, p.z + r() * 0.3, v.velocity.x * 0.25 + r(), 0.4 + Math.random() * 0.6, v.velocity.z * 0.25 + r(), 0.9 + smokeI * 0.6, 0.35 + smokeI * 0.35, 1.8 + smokeI * 1.6, shade, shade, shade);
             } else {
-              this.smoke.emit(p.x + r() * 0.3, p.y + 0.15, p.z + r() * 0.3, v.velocity.x * 0.3 + r(), 0.3, v.velocity.z * 0.3 + r(), 0.7, 0.4 * dustI, 1.3, 0.48, 0.4, 0.3, 1.6);
+              const dc = surf.dustColor || DUST_BROWN;
+              this.smoke.emit(p.x + r() * 0.3, p.y + 0.15, p.z + r() * 0.3, v.velocity.x * 0.3 + r(), 0.3, v.velocity.z * 0.3 + r(), 0.7, 0.4 * dustI, 1.3, dc[0], dc[1], dc[2], 1.6);
             }
           }
         }

@@ -7,11 +7,38 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
-/** Fullscreen WebView that runs the single-file game bundled in assets/index.html. */
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Fullscreen WebView running the game build bundled in assets/www. Files are served from a
+ * virtual https origin (like androidx WebViewAssetLoader) so ES modules, fetch() and
+ * localStorage behave exactly as on a web server, and large assets stream on demand.
+ */
 public class MainActivity extends Activity {
+    private static final String HOST = "appassets.androidplatform.net";
+    private static final Map<String, String> MIME = new HashMap<>();
+    static {
+        MIME.put("html", "text/html");
+        MIME.put("js", "text/javascript");
+        MIME.put("css", "text/css");
+        MIME.put("json", "application/json");
+        MIME.put("glb", "model/gltf-binary");
+        MIME.put("jpg", "image/jpeg");
+        MIME.put("png", "image/png");
+        MIME.put("webp", "image/webp");
+        MIME.put("svg", "image/svg+xml");
+        MIME.put("wasm", "application/wasm");
+    }
+
     private WebView web;
 
     @Override
@@ -27,14 +54,32 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true); // settings are saved in localStorage
-        s.setAllowFileAccess(true);
+        s.setAllowFileAccess(false);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setSupportZoom(false);
         web.setWebChromeClient(new WebChromeClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (!HOST.equals(request.getUrl().getHost())) return null;
+                String path = request.getUrl().getPath();
+                if (path == null || path.equals("/")) path = "/index.html";
+                try {
+                    InputStream in = getAssets().open("www" + path);
+                    String ext = path.substring(path.lastIndexOf('.') + 1).toLowerCase();
+                    String mime = MIME.containsKey(ext) ? MIME.get(ext) : "application/octet-stream";
+                    return new WebResourceResponse(mime, mime.startsWith("text") ? "utf-8" : null, in);
+                } catch (IOException e) {
+                    WebResourceResponse notFound = new WebResourceResponse("text/plain", "utf-8", null);
+                    notFound.setStatusCodeAndReasonPhrase(404, "Not Found");
+                    return notFound;
+                }
+            }
+        });
         web.setBackgroundColor(0xFF0D0F12);
         setContentView(web);
         hideSystemUi();
-        web.loadUrl("file:///android_asset/index.html");
+        web.loadUrl("https://" + HOST + "/index.html");
     }
 
     private void hideSystemUi() {

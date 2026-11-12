@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build a signed Android APK that wraps the single-file game in a fullscreen WebView.
+# Build a signed Android APK: a fullscreen WebView serving the normal web build (dist/) from
+# the APK assets through a virtual https origin (see android/.../MainActivity.java).
 # Needs: JDK 17 and an Android SDK with "platforms;android-34" and "build-tools;34.0.0"
 # (ANDROID_HOME, default /opt/android-sdk). Output: dist-single/touge-drift.apk
 set -euo pipefail
@@ -14,14 +15,15 @@ KS="${APK_KEYSTORE:-android/debug.keystore}"
 rm -rf "$OUT"
 mkdir -p "$OUT/classes" "$OUT/dex" "$OUT/assets" "$OUT/res/mipmap"
 
-node tools/build-single.mjs
-cp dist-single/touge-drift.html "$OUT/assets/index.html"
+npx vite build
+mkdir -p dist-single "$OUT/assets/www"
+cp -r dist/. "$OUT/assets/www/"
 node tools/make-icon.mjs "$OUT/res/mipmap"
 
 "$BT/aapt2" compile --dir "$OUT/res" -o "$OUT/res.zip"
 "$BT/aapt2" link -o "$OUT/base.apk" -I "$JAR" --manifest android/AndroidManifest.xml \
   -A "$OUT/assets" "$OUT/res.zip" --min-sdk-version 24 --target-sdk-version 34 \
-  --version-code 1 --version-name 1.0
+  --version-code 2 --version-name 1.1
 
 javac -nowarn -source 11 -target 11 -classpath "$JAR" -d "$OUT/classes" \
   android/src/com/tougedrift/game/MainActivity.java 2>&1 | grep -v "bootstrap classpath" || true

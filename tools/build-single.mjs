@@ -11,14 +11,12 @@ const root = path.resolve(import.meta.dirname, '..');
 const tmp = path.join(root, 'dist-single', '.tmp');
 const out = path.join(root, 'dist-single', 'touge-drift.html');
 
-// The 4K Nagao atlas is left out to keep the file small; the game falls back to the 2K one.
-const ASSETS = [
-  ['assets/cars/nissan_skyline_r32_gtr.glb', 'model/gltf-binary'],
-  ['assets/cars/toyota_chaser_tourer_v_jzx100.glb', 'model/gltf-binary'],
-  ['assets/maps/nagao/nagao.glb', 'model/gltf-binary'],
-  ['assets/maps/nagao/nagao_atlas_2k.jpg', 'image/jpeg'],
-  ['assets/maps/nagao/nagao_surface.json', 'application/json'],
-];
+// Every file under public/assets is embedded (cars and maps), so the result is large (~60 MB);
+// the APK (tools/build-apk.sh) is the better way to run on phones.
+const TYPES = { glb: 'model/gltf-binary', jpg: 'image/jpeg', webp: 'image/webp', png: 'image/png', json: 'application/json' };
+const ASSETS = fs.readdirSync(path.join(root, 'public/assets'), { recursive: true })
+  .filter((f) => TYPES[f.split('.').pop()])
+  .map((f) => [`assets/${f.split(path.sep).join('/')}`, TYPES[f.split('.').pop()]]);
 
 await build({ root, logLevel: 'warn', build: { outDir: tmp, emptyOutDir: true, copyPublicDir: false, modulePreload: false } });
 

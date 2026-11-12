@@ -47,11 +47,23 @@ for (const tab of ['Assists', 'Camera', 'Graphics', 'Tuning']) {
   await page.screenshot({ path: `test-output/ui-settings-${tab.toLowerCase()}.png` });
 }
 report.transmission = await page.evaluate(() => window.__drift.settings.data.driving.transmission);
+// New options: pedal mode select and vibration toggle are real controls bound to settings.
+report.options = await page.evaluate(() => {
+  const ui = window.__drift.ui;
+  ui.tab = 'driving'; ui.showSettings();
+  const pedals = [...document.querySelectorAll('.settings select')].find((s) => [...s.options].some((o) => o.value === 'regular'));
+  pedals.value = 'regular'; pedals.dispatchEvent(new Event('change'));
+  ui.tab = 'hud'; ui.showSettings();
+  const vib = [...document.querySelectorAll('.settings label')].find((l) => l.textContent.startsWith('Vibration')).querySelector('input');
+  vib.click();
+  const s = window.__drift.settings.data;
+  return { pedals: s.driving.pedals, vibration: s.hud.vibration, wheelRange: s.driving.wheelRange };
+});
 
 // Start driving on the forest map (MT).
 await page.evaluate(async () => {
   const { settings, ui } = window.__drift;
-  settings.set('map', 'forest');
+  settings.set('map', 'oi');
   settings.set('car', 'skyline');
   ui.closeSettings();
   await ui.start();

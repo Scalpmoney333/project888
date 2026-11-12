@@ -7,8 +7,11 @@ import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 
 const base = process.argv[2] || 'http://localhost:4173/';
-const only = process.env.MAPS ? process.env.MAPS.split(',') : ['nagao', 'forest'];
-const cars = process.env.CARS ? process.env.CARS.split(',') : ['skyline', 'chaser'];
+const only = process.env.MAPS ? process.env.MAPS.split(',') : ['nagao', 'tsukuba', 'ashinoko', 'oi'];
+const cars = process.env.CARS ? process.env.CARS.split(',') : ['skyline', 'chaser', 'markii', 's15', 's13'];
+// Every map once (cars rotated), then any car not yet covered on the first map.
+const pairs = only.map((m, i) => [m, cars[i % cars.length]]);
+for (const c of cars) if (!pairs.some((p) => p[1] === c)) pairs.push([only[0], c]);
 fs.mkdirSync('test-output', { recursive: true });
 
 const browser = await puppeteer.launch({
@@ -39,9 +42,8 @@ async function touch(type, points) {
   await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((p) => ({ x: p.x, y: p.y, id: p.id, radiusX: 4, radiusY: 4, force: 1 })) });
 }
 
-for (const map of only) {
-  for (const car of cars) {
-    if (map === 'forest' && car === 'chaser' && cars.length > 1 && !process.env.ALL) continue; // keep runtime sane
+for (const [pairIndex, [map, car]] of pairs.entries()) {
+  {
     const t0 = Date.now();
     await page.evaluate(async (map, car) => {
       const { settings, ui } = window.__drift;
@@ -70,7 +72,7 @@ for (const map of only) {
 
     // Multitouch: steering wheel + throttle together, then add the handbrake.
     let multitouch = null;
-    if (car === cars[0]) {
+    if (pairIndex === 0) {
       const wheel = await center('.ctl-wheel');
       const thr = await center('.ctl-throttle');
       const hb = await center('.ctl-handbrake');
@@ -79,13 +81,13 @@ for (const map of only) {
       await touch('touchStart', [top]);
       await touch('touchStart', [top, gas]);
       // drag finger clockwise around the wheel by ~70 degrees => steer right
-      for (let a = 0; a <= 70; a += 10) {
+      for (let a = 0; a <= 300; a += 15) {
         const r = wheel.h * 0.35, rad = (a - 90) * Math.PI / 180;
         await touch('touchMove', [{ x: wheel.x + Math.cos(rad) * r, y: wheel.y + Math.sin(rad) * r, id: 1 }, gas]);
         await sleep(30);
       }
       await sleep(2500);
-      const rad = (70 - 90) * Math.PI / 180;
+      const rad = (300 - 90) * Math.PI / 180;
       const held = { x: wheel.x + Math.cos(rad) * wheel.h * 0.35, y: wheel.y + Math.sin(rad) * wheel.h * 0.35, id: 1 };
       await touch('touchStart', [held, gas, { x: hb.x, y: hb.y, id: 3 }]);
       await sleep(600);
@@ -124,7 +126,19 @@ for (const map of only) {
         spin: v.wheels.map((w) => +w.spinAngle.toFixed(2)),
       };
     });
-    results.push({ map, car, loadSec, pivots, multitouch, state });
+    // Every start position: the car must land on a drivable surface and stay upright.
+    const spawnChecks = [];
+    const spawnIds = await page.evaluate(() => window.__drift.game.map.spawns.map((s) => s.id));
+    for (const id of spawnIds) {
+      await page.evaluate((id) => { const { game } = window.__drift; game.setSpawn(id); game.cameraRig.setMode(0); }, id);
+      await sleep(1800);
+      await page.screenshot({ path: `test-output/${map}-spawn-${id}.png` });
+      spawnChecks.push(await page.evaluate((id) => {
+        const v = window.__drift.game.vehicle;
+        return { id, contacts: v.wheels.map((w) => (w.contact ? w.surface.name : 'air')).join(','), upright: +(1 - 2 * (v.quaternion.x ** 2 + v.quaternion.z ** 2)).toFixed(3), y: +v.position.y.toFixed(1) };
+      }, id));
+    }
+    results.push({ map, car, loadSec, pivots, multitouch, state, spawnChecks });
     await page.evaluate(() => window.__drift.ui.showMenu());
     await sleep(300);
   }

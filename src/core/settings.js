@@ -22,15 +22,17 @@ export const DEFAULT_HUD_LAYOUT = {
 export const DEFAULTS = {
   car: 'skyline',
   map: 'nagao',
+  spawn: {}, // per map id: spawn point id
   paint: {},
   tuning: {}, // per car id
   driving: {
     steeringType: 'wheel', // 'wheel' | 'arrows'
     transmission: 'auto', // 'auto' | 'manual'
     clutchPedal: false,
+    pedals: 'proportional', // 'proportional' (depth by touch height) | 'regular' (on/off)
     steeringSensitivity: 1.0,
     steeringReturn: 1.0,
-    wheelRange: 140, // degrees of virtual wheel rotation to full lock
+    wheelRange: 720, // degrees of virtual wheel rotation lock to lock (one turn each way)
   },
   assists: {
     steering: 0.5,
@@ -55,6 +57,7 @@ export const DEFAULTS = {
     opacity: 0.7,
     layout: structuredClone(DEFAULT_HUD_LAYOUT),
     showTelemetry: false,
+    vibration: true, // haptic feedback on button presses and impacts
   },
   graphics: {
     preset: 'auto', // 'low' | 'medium' | 'high' | 'auto'
@@ -91,6 +94,9 @@ class SettingsStore {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { saved = {}; }
     this.data = merge(structuredClone(DEFAULTS), saved);
+    // Migrations from earlier versions.
+    if (this.data.driving.wheelRange === 140) this.data.driving.wheelRange = 720;
+    if (this.data.map === 'forest') this.data.map = 'nagao';
   }
 
   get(path) {
@@ -155,4 +161,9 @@ export function resolveGraphics(g = settings.data.graphics) {
     exhaust: g.exhaust,
     adaptive: g.adaptive,
   };
+}
+
+/** Haptic pulse, unless vibration is turned off in settings. */
+export function vibrate(ms) {
+  if (settings.data.hud.vibration && navigator.vibrate) navigator.vibrate(ms);
 }

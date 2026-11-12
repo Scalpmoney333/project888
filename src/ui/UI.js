@@ -79,6 +79,12 @@ export class UI {
       class: `card ${d.map === m.id ? 'selected' : ''}`,
       onclick: () => { settings.set('map', m.id); this.showMenu(); },
     }, h('b', {}, m.name), h('small', {}, m.subtitle)));
+    const mapDef = MAPS.find((m) => m.id === d.map) || MAPS[0];
+    const spawnId = d.spawn[mapDef.id] || mapDef.spawns[0].id;
+    const spawnButtons = mapDef.spawns.map((s) => h('button', {
+      class: `chip ${s.id === spawnId ? 'selected' : ''}`,
+      onclick: () => { settings.set(`spawn.${mapDef.id}`, s.id); this.showMenu(); },
+    }, s.name));
     const paint = PAINTS.map((c) => h('button', {
       class: `swatch ${(d.paint[d.car] || null) === c ? 'selected' : ''}`,
       style: c ? `background:${c}` : 'background:linear-gradient(135deg,#888 50%,#444 50%)',
@@ -89,7 +95,8 @@ export class UI {
       h('h1', {}, 'TOUGE ', h('span', {}, 'DRIFT')),
       h('div', { class: 'menu-cols' },
         h('section', {}, h('h3', {}, 'Car'), h('div', { class: 'cards' }, carCards), h('h3', {}, 'Paint'), h('div', { class: 'swatches' }, paint)),
-        h('section', {}, h('h3', {}, 'Map'), h('div', { class: 'cards' }, mapCards)),
+        h('section', {}, h('h3', {}, 'Map'), h('div', { class: 'cards' }, mapCards),
+          h('h3', {}, 'Start position'), h('div', { class: 'chips' }, spawnButtons)),
       ),
       h('div', { class: 'row buttons' },
         h('button', { class: 'primary', onclick: () => this.start() }, 'DRIVE'),
@@ -141,6 +148,12 @@ export class UI {
       h('h2', {}, 'Paused'),
       h('button', { class: 'primary', onclick: () => this.resume() }, 'Resume'),
       h('button', { onclick: () => { this.game.resetCar(); this.resume(); } }, 'Reset car to start'),
+      this.game.map && this.game.map.spawns.length > 1
+        ? h('div', { class: 'chips' }, this.game.map.spawns.map((s) => h('button', {
+          class: `chip ${s.id === this.game.currentSpawn().id ? 'selected' : ''}`,
+          onclick: () => { this.game.setSpawn(s.id); this.resume(); },
+        }, `Restart: ${s.name}`)))
+        : null,
       h('button', { onclick: () => this.showSettings('pause') }, 'Settings'),
       h('button', { onclick: () => this.showMenu() }, 'Main menu'),
     ));
@@ -202,9 +215,10 @@ export class UI {
         this.select('Steering type', 'driving.steeringType', [['wheel', 'Steering wheel'], ['arrows', 'Arrows']]),
         this.select('Transmission', 'driving.transmission', [['auto', 'Automatic (AT)'], ['manual', 'Manual (MT)']]),
         settings.data.driving.transmission === 'manual' ? this.toggle('Clutch pedal (MT)', 'driving.clutchPedal') : null,
+        this.select('Pedals', 'driving.pedals', [['proportional', 'Proportional (press higher = more)'], ['regular', 'Regular (on / off)']]),
         this.slider('Steering sensitivity', 'driving.steeringSensitivity', 0.4, 2, 0.05, x),
         this.slider('Steering return speed', 'driving.steeringReturn', 0.3, 2.5, 0.05, x),
-        settings.data.driving.steeringType === 'wheel' ? this.slider('Wheel rotation to full lock', 'driving.wheelRange', 60, 360, 10, (v) => `${v}°`) : null,
+        settings.data.driving.steeringType === 'wheel' ? this.slider('Wheel rotation lock to lock', 'driving.wheelRange', 180, 1080, 30, (v) => `${v}° (${(v / 720).toFixed(2)} turn each way)`) : null,
         this.select('Touch controls', 'hud.touch', [['auto', 'Auto'], ['on', 'Always show'], ['off', 'Hide']]),
         h('p', { class: 'hint' }, 'AT: hold brake at a standstill to engage reverse; the brake pedal then drives backwards. MT: use ▲/▼ (E/Q) — neutral sits between 1st and R.'),
       ];
@@ -234,6 +248,7 @@ export class UI {
         this.slider('Button transparency', 'hud.opacity', 0.15, 1, 0.05, pct),
         h('button', { class: 'primary', onclick: () => this.openEditor() }, 'Edit button positions & sizes'),
         h('button', { onclick: () => { settings.set('hud.layout', structuredClone(DEFAULT_HUD_LAYOUT)); this.showSettings(); } }, 'Restore default HUD layout'),
+        this.toggle('Vibration', 'hud.vibration'),
         this.toggle('Show telemetry', 'hud.showTelemetry'),
         this.toggle('Show FPS', 'graphics.showFps'),
       ];
