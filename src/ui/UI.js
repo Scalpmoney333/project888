@@ -16,7 +16,23 @@ const h = (tag, attrs = {}, ...children) => {
   return el;
 };
 
-const PAINTS = [null, '#c8102e', '#f4f4f2', '#111214', '#1d4ea8', '#9aa3ab', '#f2b705', '#2f7d4f'];
+const PAINTS = [
+  [null, 'Original paint'],
+  ['#f1f0eb', 'Super White II'],
+  ['#c5c8cc', 'Silver metallic'],
+  ['#6b7076', 'Gunmetal grey'],
+  ['#111214', 'Black'],
+  ['#c8102e', 'Red'],
+  ['#7a1020', 'Wine red'],
+  ['#1d4ea8', 'Blue'],
+  ['#1a2a52', 'Midnight blue'],
+  ['#2f7d4f', 'Green'],
+  ['#f2b705', 'Yellow'],
+  ['#e8641a', 'Orange'],
+  ['#6b3fa0', 'Purple'],
+  ['#d9c9a3', 'Champagne'],
+];
+const SPEEDO_COLORS = ['#ffd23f', '#ffffff', '#ff4b3a', '#ff8a1f', '#3fe07a', '#3fb8ff', '#b06bff', '#ff5fb4'];
 
 export class UI {
   constructor(root, game) {
@@ -27,6 +43,10 @@ export class UI {
     this.build();
     game.on('pause', () => { if (this.state === 'driving') this.showPause(); });
     game.on('frame', (v) => this.updateHud(v));
+    game.on('hud', (hidden) => this.hud.classList.toggle('hud-off', hidden));
+    game.on('drone', (on) => this.flash(on
+      ? 'Drone: drag to look · stick/WASD fly · ▲▼ or R/F altitude · H hide HUD · V exit'
+      : 'Back in the car', on ? 3500 : 1200));
     this.showMenu();
   }
 
@@ -56,17 +76,18 @@ export class UI {
     for (const el of [this.menu, this.pause, this.settingsEl, this.loading, this.editor]) el.classList.add('hidden');
   }
 
-  flash(text) {
+  flash(text, ms = 1200) {
     this.toast.textContent = text;
     this.toast.classList.add('show');
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.toast.classList.remove('show'), 1200);
+    this.toastTimer = setTimeout(() => this.toast.classList.remove('show'), ms);
   }
 
   // ---------------- main menu ----------------
   showMenu() {
     this.state = 'menu';
     this.game.setPaused(true);
+    this.game.setDrone(false);
     this.hideAll();
     this.hud.classList.add('hidden');
     this.game.input.root.classList.add('hidden');
@@ -85,12 +106,19 @@ export class UI {
       class: `chip ${s.id === spawnId ? 'selected' : ''}`,
       onclick: () => { settings.set(`spawn.${mapDef.id}`, s.id); this.showMenu(); },
     }, s.name));
-    const paint = PAINTS.map((c) => h('button', {
-      class: `swatch ${(d.paint[d.car] || null) === c ? 'selected' : ''}`,
-      style: c ? `background:${c}` : 'background:linear-gradient(135deg,#888 50%,#444 50%)',
-      title: c ? c : 'Original',
+    const carDef = VEHICLES.find((v) => v.id === d.car) || VEHICLES[0];
+    const current = d.paint[d.car] || null;
+    const paint = PAINTS.map(([c, name]) => h('button', {
+      class: `swatch ${current === c ? 'selected' : ''}`,
+      style: c ? `background:${c}` : `background:linear-gradient(135deg,${carDef.defaultPaint || '#999'} 50%,#444 50%)`,
+      title: name,
+      'aria-label': name,
       onclick: () => { settings.set(`paint.${d.car}`, c); this.showMenu(); },
     }));
+    const custom = h('input', { type: 'color', class: 'swatch custom', title: 'Custom colour', value: current || carDef.defaultPaint || '#ffffff' });
+    custom.addEventListener('change', () => { settings.set(`paint.${d.car}`, custom.value); this.showMenu(); });
+    if (current && !PAINTS.some(([c]) => c === current)) custom.classList.add('selected');
+    paint.push(custom);
     this.menu.replaceChildren(h('div', { class: 'panel menu-panel' },
       h('h1', {}, 'TOUGE ', h('span', {}, 'DRIFT')),
       h('div', { class: 'menu-cols' },
@@ -207,6 +235,22 @@ export class UI {
     return h('label', { class: 'field toggle' }, h('span', {}, label), cb);
   }
 
+  /** Preset colour swatches plus a free colour picker. */
+  colorField(label, path, colors) {
+    const cur = settings.get(path);
+    const pick = (c) => { settings.set(path, c); this.showSettings(); };
+    const swatches = colors.map((c) => h('button', {
+      class: `swatch ${cur === c ? 'selected' : ''}`,
+      style: `background:${c}`,
+      title: c,
+      'aria-label': c,
+      onclick: () => pick(c),
+    }));
+    const custom = h('input', { type: 'color', class: `swatch custom ${colors.includes(cur) ? '' : 'selected'}`, title: 'Custom colour', value: cur });
+    custom.addEventListener('change', () => pick(custom.value));
+    return h('div', { class: 'field' }, h('span', {}, label), h('div', { class: 'swatches' }, swatches, custom));
+  }
+
   tabContent(tab) {
     const pct = (v) => `${Math.round(v * 100)}%`;
     const x = (v) => `${(+v).toFixed(2)}×`;
@@ -246,6 +290,7 @@ export class UI {
       ];
       case 'hud': return [
         this.slider('Button transparency', 'hud.opacity', 0.15, 1, 0.05, pct),
+        this.colorField('Speedometer colour', 'hud.speedoColor', SPEEDO_COLORS),
         h('button', { class: 'primary', onclick: () => this.openEditor() }, 'Edit button positions & sizes'),
         h('button', { onclick: () => { settings.set('hud.layout', structuredClone(DEFAULT_HUD_LAYOUT)); this.showSettings(); } }, 'Restore default HUD layout'),
         this.toggle('Vibration', 'hud.vibration'),
@@ -342,7 +387,7 @@ export class UI {
     ctx.strokeStyle = 'rgba(230,40,40,0.85)';
     ctx.beginPath(); ctx.arc(cx, cy, R, ang(spec.redlineRpm), a1); ctx.stroke();
     const rpm = v.rpm;
-    ctx.strokeStyle = rpm > spec.redlineRpm ? '#ff4b3a' : '#ffd23f';
+    ctx.strokeStyle = rpm > spec.redlineRpm ? '#ff4b3a' : settings.data.hud.speedoColor;
     ctx.lineWidth = 8;
     ctx.beginPath(); ctx.arc(cx, cy, R, a0, ang(rpm)); ctx.stroke();
     ctx.fillStyle = '#fff';
@@ -357,7 +402,7 @@ export class UI {
     ctx.fillStyle = v.gear === -1 ? '#ff6b5a' : '#fff';
     ctx.fillText(gear, cx, cy - 18);
     ctx.font = 'bold 26px system-ui';
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = settings.data.hud.speedoColor;
     ctx.fillText(`${Math.round(Math.abs(v.speed) * 3.6)}`, cx, cy + 14);
     ctx.font = '11px system-ui';
     ctx.fillStyle = '#bbb';
