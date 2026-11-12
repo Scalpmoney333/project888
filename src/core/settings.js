@@ -106,6 +106,9 @@ class SettingsStore {
     // Migrations from earlier versions.
     if (this.data.driving.wheelRange === 140) this.data.driving.wheelRange = 720;
     if (['forest', 'oi', 'ashinoko'].includes(this.data.map)) this.data.map = 'nagao';
+    // v1.4 removed the low-detail JZX100s; switch to their detailed versions.
+    const renamed = { chaser: 'chaser_gta', markii: 'markii_gta' };
+    if (renamed[this.data.car]) this.data.car = renamed[this.data.car];
   }
 
   get(path) {

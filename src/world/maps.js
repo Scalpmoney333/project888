@@ -58,6 +58,26 @@ export const MAPS = [
     light: { hemi: 1.6, sun: 1.5 },
     far: 3000,
   },
+  {
+    id: 'ebisu_kita',
+    name: 'Ebisu North (Kita)',
+    subtitle: 'Drift course from the GTA IV mod by FzC',
+    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.002 },
+    sun: [-0.4, 0.8, 0.35],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 1500,
+  },
+  {
+    id: 'ebisu_minami',
+    name: 'Ebisu Minami',
+    subtitle: 'Drift circuit from the GTA V mod',
+    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
+    sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.002 },
+    sun: [0.4, 0.8, -0.3],
+    light: { hemi: 1.6, sun: 1.5 },
+    far: 1500,
+  },
 ];
 
 export async function loadMap(def, { renderer, quality, onProgress }) {

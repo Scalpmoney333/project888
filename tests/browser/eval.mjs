@@ -16,7 +16,7 @@ await page.evaluate(async (map, car) => {
   settings.set('map', map);
   settings.set('car', car);
   await ui.start();
-}, process.env.MAP || 'forest', process.env.CAR || 'chaser');
+}, process.env.MAP || 'nagao', process.env.CAR || 'chaser_gta');
 await page.waitForFunction(() => window.__drift.ui.state === 'driving');
 const out = await page.evaluate(`(() => { const { game, settings } = window.__drift; return ${process.argv[2]}; })()`);
 console.log(JSON.stringify(out));
