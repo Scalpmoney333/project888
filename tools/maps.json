@@ -6,16 +6,6 @@
     "lut": "color",
     "tile": 500
   },
-  "oi": {
-    "src": ["oi wharf 0.3.6 manuals/sharedassets18.assets.split0"],
-    "texture": "MEIHAN_MAIN_TEXTURE",
-    "meshes": [
-      { "pathId": 8, "collide": true, "surface": "lut" },
-      { "pathId": 14, "collide": true, "surface": "lut" }
-    ],
-    "lut": "color",
-    "tile": 250
-  },
   "tsukuba": {
     "src": ["Tsukuba Winter 0.4.7 manuals/sharedassets18.assets.split0"],
     "texture": "MEIHAN_MAIN_TEXTURE",
@@ -24,6 +14,7 @@
       { "name": "8_8_0_0_0", "collide": false, "material": "foliage" },
       { "name": "14_14_0_0_0", "collide": true, "surface": 6 }
     ],
+    "liftFix": { "meshes": ["8_8_0_0_0"], "ground": ["7_7_0_0_0", "14_14_0_0_0"], "dy": -3.3 },
     "tile": 600
   },
   "ashinoko": {
@@ -36,6 +27,7 @@
       { "name": "tree_a_0", "collide": "solid-only", "surface": 2, "material": "foliage" }
     ],
     "lut": "green",
+    "liftFix": { "meshes": ["tree_a_0"], "ground": ["road_a_0", "grass_a_0"], "dy": -3.32 },
     "foliageRows": [[0, 0.1], [0.76, 1]],
     "tile": 600
   }

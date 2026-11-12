@@ -39,14 +39,14 @@ export const MAPS = [
     far: 6000,
   },
   {
-    id: 'oi',
-    name: 'Oi Wharf',
-    subtitle: 'Harbour roads and container yard',
-    spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
-    sky: { top: 0x6e93c2, bottom: 0xd5dce4, fog: 0xc9d2db, fogDensity: 0.0014 },
-    sun: [0.45, 0.75, 0.3],
-    light: { hemi: 1.6, sun: 1.6 },
-    far: 3000,
+    id: 'shomaru',
+    name: 'Shomaru Touge',
+    subtitle: '5.1 km Initial D pass (GTA SA mod) • Uphill / Downhill',
+    spawns: [{ id: 'downhill', name: 'Downhill' }, { id: 'uphill', name: 'Uphill' }],
+    sky: { top: 0x88a4c4, bottom: 0xd8dccf, fog: 0xc3c9bd, fogDensity: 0.0022 },
+    sun: [0.35, 0.8, -0.3],
+    light: { hemi: 1.7, sun: 1.4 },
+    far: 3500,
   },
 ];
 
@@ -57,20 +57,38 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
   loader.setMeshoptDecoder(MeshoptDecoder);
   const [gltf, texture] = await Promise.all([
     loader.loadAsync(assetUrl(`${base}.glb`), (e) => onProgress?.(e.total ? e.loaded / e.total : 0)),
-    new THREE.TextureLoader().loadAsync(assetUrl(`assets/maps/${meta.texture}`)),
+    meta.texture ? new THREE.TextureLoader().loadAsync(assetUrl(`assets/maps/${meta.texture}`)) : null,
   ]);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.flipY = false; // glTF UV convention
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.anisotropy = Math.min(quality === 'low' ? 2 : 8, renderer.capabilities.getMaxAnisotropy());
-
-  const ground = new THREE.MeshLambertMaterial({ map: texture, side: THREE.DoubleSide });
-  // Foliage: atlases with alpha use it directly; opaque atlases draw trees on black, so the
-  // texture itself doubles as an alpha map (alphaMap reads the green channel).
-  const foliage = meta.alpha
-    ? new THREE.MeshLambertMaterial({ map: texture, side: THREE.DoubleSide, alphaTest: 0.5 })
-    : new THREE.MeshLambertMaterial({ map: texture, alphaMap: texture, side: THREE.DoubleSide, alphaTest: 0.12 });
-  if (meta.alpha) ground.alphaTest = 0.5;
+  const anisotropy = Math.min(quality === 'low' ? 2 : 8, renderer.capabilities.getMaxAnisotropy());
+  let ground, foliage;
+  if (texture) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.flipY = false; // glTF UV convention
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = anisotropy;
+    ground = new THREE.MeshLambertMaterial({ map: texture, side: THREE.DoubleSide });
+    // Foliage: atlases with alpha use it directly; opaque atlases draw trees on black, so the
+    // texture itself doubles as an alpha map (alphaMap reads the green channel).
+    foliage = meta.alpha
+      ? new THREE.MeshLambertMaterial({ map: texture, side: THREE.DoubleSide, alphaTest: 0.5 })
+      : new THREE.MeshLambertMaterial({ map: texture, alphaMap: texture, side: THREE.DoubleSide, alphaTest: 0.12 });
+    if (meta.alpha) ground.alphaTest = 0.5;
+  }
+  // Maps with per-texture materials (GTA conversions): cheap Lambert copies of the glTF ones.
+  const converted = new Map();
+  const toLambert = (m) => {
+    if (!converted.has(m)) {
+      if (m.map) m.map.anisotropy = anisotropy;
+      const l = new THREE.MeshLambertMaterial({
+        name: m.name, map: m.map, color: m.color, side: THREE.DoubleSide,
+        alphaTest: m.alphaTest || 0, transparent: false,
+      });
+      if (m.userData?.decal) Object.assign(l, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      converted.set(m, l);
+      m.dispose();
+    }
+    return converted.get(m);
+  };
 
   const group = gltf.scene;
   group.updateMatrixWorld(true);
@@ -79,7 +97,7 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
   group.traverse((o) => {
     if (!o.isMesh) return;
     meshes.push(o);
-    o.material = o.material.name === 'foliage' ? foliage : ground;
+    o.material = texture ? (o.material.name === 'foliage' ? foliage : ground) : toLambert(o.material);
     o.receiveShadow = true;
     o.matrixAutoUpdate = false;
     if (o.name.startsWith('col_') || o.parent?.name.startsWith('col_')) colliders.push(o);
@@ -126,9 +144,10 @@ export async function loadMap(def, { renderer, quality, onProgress }) {
     lightIntensity: def.light,
     far: def.far,
     dispose() {
-      texture.dispose();
-      ground.dispose();
-      foliage.dispose();
+      texture?.dispose();
+      ground?.dispose();
+      foliage?.dispose();
+      for (const m of converted.values()) { m.map?.dispose(); m.dispose(); }
       meshes.forEach((m) => m.geometry.dispose());
     },
   };

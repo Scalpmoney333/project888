@@ -1,0 +1,14 @@
+{
+  "shomaru": {
+    "surfaces": [
+      { "match": "road_dirt|road_side_c", "surface": 4 },
+      { "match": "road", "surface": 0 },
+      { "match": "slope_concrete|concrete|wall|gard|block", "surface": 2 },
+      { "match": "slope|grass", "surface": 1 }
+    ],
+    "defaultSurface": 2,
+    "foliage": "plant_tree_[a-f]|s_sy_tree1|forest|n_sy_grass|h_sy_orange",
+    "decals": "road_center|road_mark",
+    "tile": 3000
+  }
+}

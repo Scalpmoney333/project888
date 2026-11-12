@@ -76,22 +76,42 @@ behaves the same at 30, 60 or 144 FPS.
   transforms, turns models authored facing another axis (Mark II, 240SX), finds the four wheels
   (by node list or name/material pattern, splitting meshes that hold several wheels into
   connected components), builds `wheelRoot → steer → spin` pivots at each hub, and scales the
-  model so its wheelbase matches the real car. Brake calipers steer but do not spin.
-* **Maps** — Nagao, Oi Wharf, Tsukuba Winter and Ashinoko come from the uploaded Unity map mods
+  model so its wheelbase matches the real car. Wheels modelled with camber or toe (the 240SX
+  fronts have 10.7° camber) are straightened so they spin about their real axle. Brake calipers
+  steer but do not spin.
+* **Maps** — Nagao, Tsukuba Winter and Ashinoko come from the uploaded Unity map mods
   (`sharedassets18.assets.split0`). Their world meshes carry no scene transforms, so they are
   converted as-is (Unity left-handed Z-up → glTF) by `tools/convert_unity_map.py`, configured
   in `tools/maps.json` (which meshes collide, grip per mesh or from the atlas colour, foliage).
+  Tsukuba and Ashinoko store their scenery objects 3.3 m too high; the `liftFix` setting lowers
+  every object onto the ground while leaving ground patches in place (`tools/maptools.py`).
   The converter tiles the geometry for culling, writes the atlas and finds the longest road to
   place two start points (Uphill/Downhill when the ends differ by more than 80 m).
   `tools/compress-glb.mjs` then applies meshopt compression:
 
   ```bash
-  python3 -m venv venv && venv/bin/pip install UnityPy numpy pillow
+  python3 -m venv venv && venv/bin/pip install UnityPy numpy scipy pillow texture2ddecoder
   venv/bin/python tools/convert_unity_map.py nagao "<folder with the extracted zip>" out/
   node tools/compress-glb.mjs out/nagao.raw.glb public/assets/maps/nagao.glb
   cp out/nagao.json out/nagao.jpg public/assets/maps/
   ```
 
-  The Forest Loop Raceway was removed: its uploaded file had no track geometry.
+* **GTA San Andreas mods** — `tools/gta/rw.py` reads RenderWare DFF/TXD files (including
+  DXT1/3/5 textures). `tools/gta/convert_gta_map.py` turns Shomaru Touge (IPL placements +
+  30 DFF pieces + TXD) into a map with per-texture materials (rules in `tools/gta/gta_maps.json`);
+  `tools/gta/convert_gta_car.py` turns the Mark II JZX100 DFF/TXD into a glb, copying GTA's single
+  wheel model to the four wheel positions. The car is then simplified for phones
+  (562k → 171k triangles):
+
+  ```bash
+  venv/bin/python tools/gta/convert_gta_map.py shomaru "<Shomaru Touge/Shomaru>" out/
+  node tools/compress-glb.mjs out/shomaru.raw.glb public/assets/maps/shomaru.glb
+  venv/bin/python tools/gta/convert_gta_car.py "<folder with 1_d.dff, 1_d.txd>" out/mark2.glb
+  node tools/optimize-car.mjs out/mark2.glb public/assets/cars/toyota_mark_ii_jzx100_gta.glb --simplify 0.2 0.0012
+  ```
+
+  The car archive is RAR5; extract it with RARLAB `unrar` (p7zip and unar fail on it).
+
+  Forest Loop Raceway (no track geometry in its file) and Oi Wharf were removed.
 
 Make sure you have the rights to redistribute the uploaded models and map before publishing.

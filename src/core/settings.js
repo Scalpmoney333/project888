@@ -96,7 +96,7 @@ class SettingsStore {
     this.data = merge(structuredClone(DEFAULTS), saved);
     // Migrations from earlier versions.
     if (this.data.driving.wheelRange === 140) this.data.driving.wheelRange = 720;
-    if (this.data.map === 'forest') this.data.map = 'nagao';
+    if (this.data.map === 'forest' || this.data.map === 'oi') this.data.map = 'nagao';
   }
 
   get(path) {

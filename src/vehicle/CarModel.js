@@ -10,6 +10,51 @@ import * as THREE from 'three';
 
 const _box = new THREE.Box3();
 const _v = new THREE.Vector3();
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+
+/**
+ * Axle direction of a tyre: the principal axis with the smallest spread (a tyre is a ring,
+ * thin along its axle). Covariance eigenvectors via Jacobi rotations on the 3x3 matrix.
+ */
+function axleDirection(geometry) {
+  const p = geometry.attributes.position;
+  const n = p.count;
+  let mx = 0, my = 0, mz = 0;
+  for (let i = 0; i < n; i++) { mx += p.getX(i); my += p.getY(i); mz += p.getZ(i); }
+  mx /= n; my /= n; mz /= n;
+  const a = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (let i = 0; i < n; i++) {
+    const d = [p.getX(i) - mx, p.getY(i) - my, p.getZ(i) - mz];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) a[r][c] += d[r] * d[c];
+  }
+  const v = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let sweep = 0; sweep < 30; sweep++) {
+    for (const [pi, qi] of [[0, 1], [0, 2], [1, 2]]) {
+      if (Math.abs(a[pi][qi]) < 1e-12) continue;
+      const theta = (a[qi][qi] - a[pi][pi]) / (2 * a[pi][qi]);
+      const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+      const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < 3; k++) {
+        const akp = a[k][pi], akq = a[k][qi];
+        a[k][pi] = c * akp - s * akq;
+        a[k][qi] = s * akp + c * akq;
+      }
+      for (let k = 0; k < 3; k++) {
+        const apk = a[pi][k], aqk = a[qi][k];
+        a[pi][k] = c * apk - s * aqk;
+        a[qi][k] = s * apk + c * aqk;
+      }
+      for (let k = 0; k < 3; k++) {
+        const vkp = v[k][pi], vkq = v[k][qi];
+        v[k][pi] = c * vkp - s * vkq;
+        v[k][qi] = s * vkp + c * vkq;
+      }
+    }
+  }
+  let m = 0;
+  for (let k = 1; k < 3; k++) if (a[k][k] < a[m][m]) m = k;
+  return new THREE.Vector3(v[0][m], v[1][m], v[2][m]).normalize();
+}
 
 /** Split an indexed geometry into connected components (vertices welded by position). */
 function connectedComponents(geometry) {
@@ -164,6 +209,7 @@ export class CarModel {
       corners[i].radius = Math.max(s.y, s.z) / 2;
       corners[i].width = s.x;
       corners[i].parts = [];
+      corners[i].tyre = tyre;
     }
     for (const c of wheelComps) {
       const w = corners[c.corner];
@@ -189,6 +235,26 @@ export class CarModel {
         p.geometry.translate(-w.center.x, -w.center.y, -w.center.z);
       }
     }
+    // Straighten wheels modelled with camber or toe (e.g. the 240SX front wheels): find the
+    // tyre's real axle direction and rotate the whole wheel so that axle lies along X. The
+    // spin pivot rotates about X, so a tilted wheel would otherwise wobble as it turns.
+    this.wheelAlignment = corners.map((w) => {
+      const axis = axleDirection(w.tyre.geometry);
+      if (axis.x < 0) axis.negate();
+      const angle = THREE.MathUtils.radToDeg(axis.angleTo(X_AXIS));
+      if (angle > 0.3) {
+        const q = new THREE.Quaternion().setFromUnitVectors(axis, X_AXIS);
+        for (const p of w.parts) p.geometry.applyQuaternion(q);
+        w.tyre.geometry.computeBoundingBox();
+        const s = w.tyre.geometry.boundingBox.getSize(new THREE.Vector3());
+        w.radius = Math.max(s.y, s.z) / 2;
+        w.width = s.x;
+      }
+      return {
+        camberDeg: +THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(axis.y, -1, 1))).toFixed(2),
+        toeDeg: +THREE.MathUtils.radToDeg(Math.atan2(axis.z, axis.x)).toFixed(2),
+      };
+    });
     this.scale = scale;
     this.wheelInfo = corners.map((c) => ({ center: c.center.clone(), radius: c.radius, width: c.width }));
 
