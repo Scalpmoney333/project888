@@ -127,6 +127,21 @@ behaves the same at 30, 60 or 144 FPS.
   file), Oi Wharf and Ashinoko were removed, and in v1.4 the low-detail Chaser and Mark II
   (replaced by their GTA versions).
 
+* **GTA IV / GTA V maps (v1.4)** — Ebisu North (Kita, GTA IV mod by FzC) and Ebisu Minami
+  (GTA V mod) have their own decoders: `tools/gta4/` reads the RAGE resources inside the IMG
+  archives by scanning for them (the archives' encrypted table of contents is never opened, so
+  no game key is needed) and `tools/gtav/` reads loose YDR/YTD/YMAP files. Both write the same
+  output as the San Andreas converter. Minami's trees and props are base-game GTA V models that
+  are not in the mod, so they are absent. The Kita readme asks that the map not be re-uploaded
+  without its author's permission.
+
+  ```bash
+  venv/bin/python tools/gta4/convert_gta4_map.py ebisu_kita "<Ebisu North Kita by FzC>" out/
+  venv/bin/python tools/gtav/convert_gtav_map.py ebisu_minami "<Minami Hotfix position>" out/
+  node tools/compress-glb.mjs out/ebisu_kita.raw.glb public/assets/maps/ebisu_kita.glb  # same for minami
+  cp out/ebisu_kita.json out/ebisu_minami.json public/assets/maps/
+  ```
+
 * **Performance** — keep each map near Shomaru's budget (~160k triangles, textures ≤512 px)
   and each car ≤ ~180k triangles with 512 px textures (`node tools/glb-stats.mjs <file.glb>`
   prints triangles and estimated GPU texture memory). `tools/simplify-map.mjs` thins an existing

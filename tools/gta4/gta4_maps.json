@@ -1,0 +1,20 @@
+{
+  "ebisu_kita": {
+    "surfaces": [
+      { "match": "^road_tarmac|^pitlane", "surface": 0 },
+      { "match": "^ripple", "surface": 3 },
+      { "match": "^dirtx", "surface": 4 },
+      { "match": "^grass", "surface": 1 },
+      { "match": "concg|cement", "surface": 2 }
+    ],
+    "defaultSurface": 2,
+    "spawnRoad": "^road_tarmac",
+    "spawns": [
+      { "id": "a", "name": "Start A", "near": [-115, -2], "toward": [-72, -60] },
+      { "id": "b", "name": "Start B", "near": [85, -50], "toward": [5, -63] }
+    ],
+    "foliage": "^(grass01|grass02|t0424_0|tree_bit|lighta)$",
+    "decals": "^trave01$",
+    "tile": 120
+  }
+}

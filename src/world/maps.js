@@ -61,7 +61,7 @@ export const MAPS = [
   {
     id: 'ebisu_kita',
     name: 'Ebisu North (Kita)',
-    subtitle: 'Drift course from the GTA IV mod by FzC',
+    subtitle: 'Ebisu north drift course • GTA IV mod by FzC',
     spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
     sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.002 },
     sun: [-0.4, 0.8, 0.35],
@@ -70,8 +70,8 @@ export const MAPS = [
   },
   {
     id: 'ebisu_minami',
-    name: 'Ebisu Minami',
-    subtitle: 'Drift circuit from the GTA V mod',
+    name: 'Ebisu Minami (South)',
+    subtitle: 'Ebisu south drift circuit • GTA V mod',
     spawns: [{ id: 'a', name: 'Start A' }, { id: 'b', name: 'Start B' }],
     sky: { top: 0x7da2cf, bottom: 0xd6dde3, fog: 0xc9d1d8, fogDensity: 0.002 },
     sun: [0.4, 0.8, -0.3],
