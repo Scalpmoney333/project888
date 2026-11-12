@@ -30,6 +30,8 @@ const DUST_BROWN = [0.48, 0.4, 0.3];
 // While the drone flies, the parked car holds its handbrake and the drone gets no input when paused.
 const PARKED = { steer: 0, throttle: 0, brake: 0, handbrake: 1, clutch: 0 };
 const DRONE_IDLE = { forward: 0, right: 0, up: 0, fast: false };
+// Metres from the camera within which foliage tiles are drawn, per graphics preset.
+const FOLIAGE_RANGE = { low: 220, medium: 380, high: 700 };
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -235,8 +237,36 @@ export class Game {
     this.applyDriving();
     this.resetCar();
     this.cameraRig.mode = settings.data.camera.mode;
+    this.prepareGpu();
     onProgress(1, 'Ready');
     this.emit('session', { car: carDef, map: mapDef });
+  }
+
+  /**
+   * Upload every texture and compile every shader now, while the loading screen is up.
+   * Otherwise three.js does it the first time each piece of scenery comes into view, which
+   * stalls the frame (very visible on maps with many textures).
+   */
+  prepareGpu() {
+    for (const f of this.map.foliage) f.mesh.visible = true;
+    this.scene.traverse((o) => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        for (const t of [m.map, m.alphaMap, m.normalMap, m.emissiveMap, m.roughnessMap, m.metalnessMap]) {
+          if (t) this.renderer.initTexture(t);
+        }
+      }
+    });
+    this.renderer.compile(this.scene, this.camera);
+    this.cullFoliage(true);
+  }
+
+  /** Hide tree/grass tiles beyond the preset's foliage distance (they dominate GTA maps). */
+  cullFoliage(force = false) {
+    if (!force && (this.foliageTick = (this.foliageTick || 0) + 1) % 10) return;
+    const range = FOLIAGE_RANGE[this.gfx.preset] ?? Infinity;
+    const cam = this.camera.position;
+    for (const f of this.map.foliage) f.mesh.visible = cam.distanceTo(f.center) - f.radius < range;
   }
 
   /** Spawn point chosen for the current map (Uphill/Downhill etc.). */
@@ -396,6 +426,7 @@ export class Game {
     this.model.update(v, braking);
     if (this.drone.active) this.drone.update(dt, this.paused ? DRONE_IDLE : this.input.droneInput());
     else this.cameraRig.update(dt, v, this.model);
+    this.cullFoliage();
     this.sky.position.copy(this.camera.position);
 
     // sun + shadow follow the car

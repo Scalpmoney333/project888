@@ -1,0 +1,21 @@
+{
+  "ebisu_minami": {
+    "ymaps": ["Minami.ymap"],
+    "ytds": ["Minami.ytd"],
+    "surfaces": [
+      { "match": "ebisu_roadpark|road_tarmac", "surface": 0 },
+      { "match": "eb_m_kerb_concrete", "surface": 2 },
+      { "match": "eb_m_kerb", "surface": 3 },
+      { "match": "grass|trackedge", "surface": 1 },
+      { "match": "minami_green", "surface": 2 }
+    ],
+    "defaultSurface": 2,
+    "visualOnly": "^cone$",
+    "tile": 120,
+    "maxTexture": 512,
+    "spawns": [
+      { "id": "a", "name": "Start A", "at": [0, 0], "toward": [0, 0] },
+      { "id": "b", "name": "Start B", "at": [0, 0], "toward": [0, 0] }
+    ]
+  }
+}
