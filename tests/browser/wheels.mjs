@@ -24,7 +24,7 @@ const parts = await page.evaluate(() => {
   return game.model.wheels.map((w) => ({
     name: w.root.name,
     spin: w.spin.children.map((m) => `${m.material.name}:${m.geometry.attributes.position.count}`),
-    steer: w.steer.children.filter((c) => c !== w.spin).map((m) => `${m.material.name}:${m.geometry.attributes.position.count}`),
+    steer: w.camber.children.filter((c) => c !== w.spin).map((m) => `${m.material.name}:${m.geometry.attributes.position.count}`),
     info: { r: +w.info.radius.toFixed(3), w: +w.info.width.toFixed(3), c: w.info.center.toArray().map((x) => +x.toFixed(2)) },
   }));
 });

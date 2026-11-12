@@ -7,8 +7,8 @@ import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 
 const base = process.argv[2] || 'http://localhost:4173/';
-const only = process.env.MAPS ? process.env.MAPS.split(',') : ['nagao', 'tsukuba', 'shomaru', 'nagao_gta', 'tsukuba_gta'];
-const cars = process.env.CARS ? process.env.CARS.split(',') : ['skyline', 's15', 's13', 'markii_gta', 'chaser_gta', 's15_gta'];
+const only = process.env.MAPS ? process.env.MAPS.split(',') : ['nagao', 'tsukuba', 'shomaru', 'nagao_gta', 'tsukuba_gta', 'ebisu_kita', 'ebisu_minami', 'usui'];
+const cars = process.env.CARS ? process.env.CARS.split(',') : ['skyline', 's15', 's13', 'markii_gta', 'chaser_gta', 's15_gta', 'chaser_snow'];
 // Every map once (cars rotated), then any car not yet covered on the first map.
 const pairs = only.map((m, i) => [m, cars[i % cars.length]]);
 for (const c of cars) if (!pairs.some((p) => p[1] === c)) pairs.push([only[0], c]);
@@ -65,7 +65,7 @@ for (const [pairIndex, [map, car]] of pairs.entries()) {
         const box = new (game.model.bodyBox.constructor)().setFromObject(w.spin);
         const c = box.getCenter(new (game.model.bodyBox.min.constructor)());
         const p = w.spin.getWorldPosition(new (game.model.bodyBox.min.constructor)());
-        return { name: w.root.name, offsetCm: +(c.distanceTo(p) * 100).toFixed(1), parts: w.spin.children.length + w.steer.children.length - 1 };
+        return { name: w.root.name, offsetCm: +(c.distanceTo(p) * 100).toFixed(1), parts: w.spin.children.length + w.camber.children.length - 1 };
       });
     });
     await page.screenshot({ path: `test-output/${map}-${car}-start.png` });

@@ -348,6 +348,65 @@ export const VEHICLES = [
       aero: { drag: 0.38, downforce: 0.05 },
     },
   },
+  {
+    id: 'chaser_snow',
+    name: 'Toyota Chaser JZX100 Snow Drift',
+    subtitle: '1JZ-GTE • 5-speed • snow drift build by Kz • from the GTA V mod',
+    url: 'assets/cars/toyota_chaser_snow_gtav.glb',
+    defaultPaint: '#f1f0eb',
+    model: {
+      // Converted by tools/gtav/convert_gtav_car.py: faces -Z, wheel nodes wheel_lf/rf/lb/rb,
+      // brake calipers in hub_* nodes (they steer but do not spin).
+      yaw: 180,
+      wheelMatch: '^(wheel|hub)_',
+      splitWheelMeshes: false,
+      nonSpinMatch: '^caliper$',
+      realWheelbase: 2.73,
+      paintMaterial: '^paint',
+      brakeLightMaterial: '^(light_vermelho|glass_vermelho_t)$',
+      driverSide: 'right',
+      cockpit: { y: 1.08, z: -0.2 },
+    },
+    defaults: {
+      powerKW: 260,
+      maxTorque: 440,
+      mass: 1470,
+      steeringSensitivity: 1.0,
+      steeringAngle: 58,
+      frontGrip: 1.12,
+      rearGrip: 1.02,
+      handbrake: 3500,
+      suspensionStiffness: 1.15,
+      suspensionDamping: 0.5,
+      diffLock: 0.85,
+      wheelbase: 2.73,
+      trackWidth: 1.5,
+    },
+    base: {
+      cgHeight: 0.48,
+      frontWeight: 0.53,
+      inertiaScale: 1.05,
+      groundClearance: 0.12,
+      rollCenterHeight: 0.15,
+      wheelInertia: 1.1,
+      body: { length: 4.715, width: 1.755, height: 1.39 },
+      engine: {
+        idleRpm: 850, redlineRpm: 7200, limiterRpm: 7600, launchRpm: 3000, torquePeakRpm: 3800,
+        engineInertia: 0.19, engineBrake: 65, efficiency: 0.9,
+        gears: [3.251, 1.955, 1.31, 1.0, 0.753], reverseRatio: 3.768, finalDrive: 4.3,
+        shiftTimeUp: 0.14, shiftTimeDown: 0.18,
+      },
+      steeringRate: 4.8,
+      ackermann: 0.15,
+      tires: {
+        front: { peakSlipRatio: 0.1, peakSlipAngle: 0.14, shape: 1.3, loadSensitivity: 0.12 },
+        rear: { peakSlipRatio: 0.1, peakSlipAngle: 0.16, shape: 1.45, loadSensitivity: 0.12 },
+      },
+      suspension: { stiffnessFront: 50000, stiffnessRear: 44000, reboundRatio: 1.35, travel: 0.17, antiRollFront: 24000, antiRollRear: 11000 },
+      brakes: { maxTorque: 5400, frontBias: 0.64 },
+      aero: { drag: 0.43, downforce: 0.04 },
+    },
+  },
 ];
 
 /** Player-facing tuning parameters with UI ranges. */
@@ -367,6 +426,15 @@ export const TUNING_PARAMS = [
   { key: 'trackWidth', label: 'Track width', unit: 'm', min: 1.3, max: 1.7, step: 0.01 },
 ];
 
+/** Wheel fitment controls (Fitment tab). Offsets are per side; camber is negative = top inward. */
+export const FITMENT_PARAMS = [
+  { key: 'offsetFront', label: 'Front wheel offset (per side)', unit: 'cm', min: -3, max: 12, step: 0.5 },
+  { key: 'offsetRear', label: 'Rear wheel offset (per side)', unit: 'cm', min: -3, max: 12, step: 0.5 },
+  { key: 'camberFront', label: 'Front camber', unit: '°', min: -15, max: 3, step: 0.5 },
+  { key: 'camberRear', label: 'Rear camber', unit: '°', min: -12, max: 3, step: 0.5 },
+  { key: 'rideHeight', label: 'Ride height', unit: 'cm', min: -8, max: 6, step: 0.5 },
+];
+
 export function getVehicle(id) {
   return VEHICLES.find((v) => v.id === id) || VEHICLES[0];
 }
@@ -377,22 +445,28 @@ export function getVehicle(id) {
  * @param {object} tune  values keyed like TUNING_PARAMS (missing keys use defaults)
  * @param {object} [measured] {wheelRadiusFront, wheelRadiusRear, body}
  */
-export function buildSpec(def, tune = {}, measured = {}) {
+export function buildSpec(def, tune = {}, measured = {}, fitment = {}) {
   const t = { ...def.defaults, ...tune };
   const b = def.base;
   const stiff = t.suspensionStiffness;
+  const f = { offsetFront: 0, offsetRear: 0, camberFront: 0, camberRear: 0, rideHeight: 0, ...fitment };
+  // Ride height moves the body (and its CG) relative to the wheels; keep the floor off the road.
+  const lift = Math.max(f.rideHeight / 100, 0.03 - b.groundClearance);
   return {
     id: def.id,
     mass: t.mass,
-    cgHeight: b.cgHeight,
+    cgHeight: b.cgHeight + lift,
     frontWeight: b.frontWeight,
     inertiaScale: b.inertiaScale,
-    groundClearance: b.groundClearance,
+    groundClearance: b.groundClearance + lift,
     rollCenterHeight: b.rollCenterHeight,
     wheelInertia: b.wheelInertia,
     wheelbase: t.wheelbase,
-    trackFront: t.trackWidth,
-    trackRear: t.trackWidth,
+    trackFront: t.trackWidth + (2 * f.offsetFront) / 100,
+    trackRear: t.trackWidth + (2 * f.offsetRear) / 100,
+    camberFront: f.camberFront * DEG,
+    camberRear: f.camberRear * DEG,
+    rideLift: lift,
     wheelRadiusFront: measured.wheelRadiusFront ?? 0.32,
     wheelRadiusRear: measured.wheelRadiusRear ?? 0.32,
     body: measured.body ?? b.body,

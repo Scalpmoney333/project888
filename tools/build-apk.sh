@@ -23,7 +23,7 @@ node tools/make-icon.mjs "$OUT/res/mipmap"
 "$BT/aapt2" compile --dir "$OUT/res" -o "$OUT/res.zip"
 "$BT/aapt2" link -o "$OUT/base.apk" -I "$JAR" --manifest android/AndroidManifest.xml \
   -A "$OUT/assets" "$OUT/res.zip" --min-sdk-version 24 --target-sdk-version 34 \
-  --version-code 5 --version-name 1.4
+  --version-code 6 --version-name 1.5
 
 javac -nowarn -source 11 -target 11 -classpath "$JAR" -d "$OUT/classes" \
   android/src/com/tougedrift/game/MainActivity.java 2>&1 | grep -v "bootstrap classpath" || true

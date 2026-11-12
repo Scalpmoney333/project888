@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { makeCar, drive, deg, upright } from './helpers.js';
 import { chassisMetrics } from './chassis.mjs';
 
-const CARS = ['skyline', 's15', 's13', 'markii_gta', 'chaser_gta', 's15_gta'];
+const CARS = ['skyline', 's15', 's13', 'markii_gta', 'chaser_gta', 's15_gta', 'chaser_snow'];
 const neutral = { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
 
 // Body control: no car may roll or wobble like the original loose Chaser setup did
