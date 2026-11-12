@@ -54,6 +54,8 @@ button.primary { background: var(--accent2); border-color: transparent; font-wei
 .bar > div { height: 100%; width: 0; background: var(--accent2); transition: width 0.2s; }
 
 .settings-panel { width: min(760px, 100%); height: min(560px, 100%); display: flex; flex-direction: column; padding: 0; }
+.overlay.docked { background: none; justify-content: flex-start; pointer-events: none; }
+.overlay.docked > .panel { pointer-events: auto; width: min(360px, 46vw); background: rgba(18, 20, 24, 0.86); }
 .tabs { display: flex; gap: 4px; padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); overflow-x: auto; flex-shrink: 0; touch-action: pan-x; }
 .tabs button { padding: 8px 12px; background: transparent; border-color: transparent; white-space: nowrap; }
 .tabs button.selected { background: #2e333b; border-color: rgba(255, 255, 255, 0.15); }
@@ -79,7 +81,7 @@ input[type='checkbox'] { width: 24px; height: 24px; accent-color: var(--accent2)
 .hud.hud-off > * { display: none; }
 .hud.hud-off > .toast { display: block; }
 .ctl-hudToggle.on { opacity: 0.35; font-size: 10px !important; }
-.ctl-droneFast.on { border-color: var(--accent); background: rgba(255, 140, 30, 0.6); }
+.ctl-droneFast.on, .ctl-lights.on { border-color: var(--accent); background: rgba(255, 140, 30, 0.6); }
 .ctl-droneStick { background: rgba(20, 22, 26, 0.35); }
 .ctl-droneStick .stick-knob { width: 42%; height: 42%; border-radius: 50%; background: rgba(255, 255, 255, 0.55); pointer-events: none; }
 .fps { position: absolute; right: max(8px, env(safe-area-inset-right)); bottom: 4px; font-size: 11px; color: #9f9; text-shadow: 0 1px 2px #000; }

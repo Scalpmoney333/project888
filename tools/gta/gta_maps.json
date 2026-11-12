@@ -10,5 +10,16 @@
     "foliage": "plant_tree_[a-f]|s_sy_tree1|forest|n_sy_grass|h_sy_orange",
     "decals": "road_center|road_mark",
     "tile": 3000
+  },
+  "usui": {
+    "surfaces": [
+      { "match": "side_dirt|side_cement", "surface": 4 },
+      { "match": "^road_|^z_new_|sandy|crack_side|^side$|center_yelo|zebra|wall05_side", "surface": 0 },
+      { "match": "^grass|grassy_medium|^mot$", "surface": 1 }
+    ],
+    "defaultSurface": 2,
+    "foliage": "trees|grass_3d|grass_wall|ground_grass_add|0bkatex|otpo_0",
+    "decals": "^$",
+    "tile": 1000
   }
 }

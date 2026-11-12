@@ -11,6 +11,8 @@ import * as THREE from 'three';
 const _box = new THREE.Box3();
 const _v = new THREE.Vector3();
 const X_AXIS = new THREE.Vector3(1, 0, 0);
+// Spot light intensity (candela, decay 1.2) of each headlight at night.
+const HEADLIGHT_INTENSITY = 60;
 
 /**
  * Axle direction of a tyre: the principal axis with the smallest spread (a tyre is a ring,
@@ -287,18 +289,20 @@ export class CarModel {
     this.wheels = corners.map((c, i) => {
       const wheelRoot = new THREE.Group();
       const steer = new THREE.Group();
+      const camber = new THREE.Group(); // fitment camber, between steering and the axle spin
       const spin = new THREE.Group();
       wheelRoot.add(steer);
-      steer.add(spin);
+      steer.add(camber);
+      camber.add(spin);
       for (const p of c.parts) {
         const mesh = new THREE.Mesh(p.geometry, p.material);
         mesh.castShadow = true;
         const fixed = nonSpin.includes(p.material.name) || (nonSpinRe && nonSpinRe.test(p.material.name || ''));
-        (fixed ? steer : spin).add(mesh);
+        (fixed ? camber : spin).add(mesh);
       }
       wheelRoot.name = ['wheel_FL', 'wheel_FR', 'wheel_RL', 'wheel_RR'][i];
       this.root.add(wheelRoot);
-      return { root: wheelRoot, steer, spin, info: this.wheelInfo[i] };
+      return { root: wheelRoot, steer, camber, spin, info: this.wheelInfo[i] };
     });
 
     // Measurements used by physics and cameras.
@@ -336,7 +340,55 @@ export class CarModel {
   /** Model-space z of the centre of gravity for a spec. */
   cgOffset(spec) {
     const zFront = this.measured.wheelbase / 2;
-    return new THREE.Vector3(0, spec.cgHeight, zFront - spec.wheelbase * (1 - spec.frontWeight));
+    // Ride height lifts the body together with its CG, so in model space the CG stays put.
+    return new THREE.Vector3(0, spec.cgHeight - (spec.rideLift || 0), zFront - spec.wheelbase * (1 - spec.frontWeight));
+  }
+
+  /**
+   * Night headlights. `available` creates the two spot lights (only at night: adding lights
+   * recompiles shaders, so this is done before driving), `on` switches them and the lamp glow.
+   */
+  setHeadlights(available, on) {
+    if (available && !this.headlights) {
+      const b = this.bodyBox;
+      const y = THREE.MathUtils.lerp(b.min.y, b.max.y, 0.42);
+      const z = this.frontZ - 0.15;
+      const x = (b.max.x - b.min.x) * 0.33;
+      const glowMat = new THREE.MeshBasicMaterial({ color: 0xfff6e0, transparent: true, opacity: 0.95, depthWrite: false, fog: false });
+      const glowGeo = new THREE.CircleGeometry(0.075, 16);
+      this.headlights = [-1, 1].map((side) => {
+        const light = new THREE.SpotLight(0xfff1d6, HEADLIGHT_INTENSITY, 95, 0.5, 0.55, 1.2);
+        light.position.set(side * x, y, z);
+        light.target.position.set(side * x * 1.6, 0, z + 30);
+        const glow = new THREE.Mesh(glowGeo, glowMat);
+        glow.position.set(side * x, y, z + 0.17);
+        this.body.add(light, light.target, glow);
+        return { light, glow };
+      });
+      const headRe = this.def.model.headLightMaterial ? new RegExp(this.def.model.headLightMaterial, 'i') : /headl|fara|front_?light/i;
+      this.headLightMaterials = [];
+      for (const m of this.body.children) {
+        if (m.isMesh && headRe.test(m.material.name || '') && !this.brakeLightMaterials.includes(m.material)) {
+          m.material.emissive ||= new THREE.Color();
+          this.headLightMaterials.push(m.material);
+        }
+      }
+    } else if (!available && this.headlights) {
+      for (const h of this.headlights) {
+        this.body.remove(h.light, h.light.target, h.glow);
+        h.light.dispose();
+      }
+      this.headlights[0].glow.geometry.dispose();
+      this.headlights[0].glow.material.dispose();
+      for (const m of this.headLightMaterials) m.emissive.setRGB(0, 0, 0);
+      this.headlights = null;
+    }
+    if (!this.headlights) return;
+    for (const h of this.headlights) {
+      h.light.intensity = on ? HEADLIGHT_INTENSITY : 0;
+      h.glow.visible = on;
+    }
+    for (const m of this.headLightMaterials) m.emissive.setRGB(on ? 1 : 0, on ? 0.95 : 0, on ? 0.85 : 0);
   }
 
   setPaint(color) {
@@ -360,6 +412,8 @@ export class CarModel {
       const vw = this.wheels[i];
       vw.root.position.set(w.mountTop.x, w.mountTop.y - w.length, w.mountTop.z);
       vw.steer.rotation.y = w.steer;
+      // Negative camber tilts the top of the wheel towards the car (left wheels sit at +x).
+      vw.camber.rotation.z = (w.left ? -1 : 1) * (w.front ? vehicle.spec.camberFront : vehicle.spec.camberRear) || 0;
       vw.spin.rotation.x = w.spinAngle;
     }
     for (const m of this.brakeLightMaterials) {

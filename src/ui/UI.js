@@ -1,7 +1,8 @@
 // DOM user interface: menus, settings, HUD readouts and the HUD layout editor.
 
 import { settings, DEFAULTS, DEFAULT_HUD_LAYOUT, applyPreset } from '../core/settings.js';
-import { VEHICLES, TUNING_PARAMS } from '../vehicle/specs.js';
+import { VEHICLES, TUNING_PARAMS, FITMENT_PARAMS } from '../vehicle/specs.js';
+import { TIMES_OF_DAY } from '../world/timeOfDay.js';
 import { MAPS } from '../core/Game.js';
 import { CAMERA_MODES } from '../camera/CameraRig.js';
 
@@ -119,17 +120,23 @@ export class UI {
     custom.addEventListener('change', () => { settings.set(`paint.${d.car}`, custom.value); this.showMenu(); });
     if (current && !PAINTS.some(([c]) => c === current)) custom.classList.add('selected');
     paint.push(custom);
+    const timeButtons = TIMES_OF_DAY.map(([id, label]) => h('button', {
+      class: `chip ${d.timeOfDay === id ? 'selected' : ''}`,
+      onclick: () => { settings.set('timeOfDay', id); this.showMenu(); },
+    }, label));
     this.menu.replaceChildren(h('div', { class: 'panel menu-panel' },
       h('h1', {}, 'TOUGE ', h('span', {}, 'DRIFT')),
       h('div', { class: 'menu-cols' },
         h('section', {}, h('h3', {}, 'Car'), h('div', { class: 'cards' }, carCards), h('h3', {}, 'Paint'), h('div', { class: 'swatches' }, paint)),
         h('section', {}, h('h3', {}, 'Map'), h('div', { class: 'cards' }, mapCards),
-          h('h3', {}, 'Start position'), h('div', { class: 'chips' }, spawnButtons)),
+          h('h3', {}, 'Start position'), h('div', { class: 'chips' }, spawnButtons),
+          h('h3', {}, 'Time of day'), h('div', { class: 'chips' }, timeButtons)),
       ),
       h('div', { class: 'row buttons' },
         h('button', { class: 'primary', onclick: () => this.start() }, 'DRIVE'),
         h('button', { onclick: () => this.showSettings('menu') }, 'Settings'),
         h('button', { onclick: () => { this.tab = 'tuning'; this.showSettings('menu'); } }, 'Tune car'),
+        h('button', { onclick: () => { this.tab = 'fitment'; this.showSettings('menu'); } }, 'Fitment'),
       ),
       h('p', { class: 'hint' }, 'Keyboard: W/S or ↑/↓ throttle/brake · A/D steer · Space handbrake · E/Q shift · X clutch · C camera · R reset · Esc pause'),
     ));
@@ -183,6 +190,7 @@ export class UI {
         }, `Restart: ${s.name}`)))
         : null,
       h('button', { onclick: () => this.showSettings('pause') }, 'Settings'),
+      h('button', { onclick: () => { this.tab = 'fitment'; this.showSettings('pause'); } }, 'Fitment'),
       h('button', { onclick: () => this.showMenu() }, 'Main menu'),
     ));
     this.pause.classList.remove('hidden');
@@ -193,7 +201,7 @@ export class UI {
     this.back = back || this.back;
     this.hideAll();
     this.state = 'settings';
-    const tabs = [['driving', 'Driving'], ['assists', 'Assists'], ['camera', 'Camera'], ['hud', 'HUD'], ['graphics', 'Graphics'], ['audio', 'Audio'], ['tuning', 'Tuning']];
+    const tabs = [['driving', 'Driving'], ['assists', 'Assists'], ['camera', 'Camera'], ['hud', 'HUD'], ['graphics', 'Graphics'], ['audio', 'Audio'], ['tuning', 'Tuning'], ['fitment', 'Fitment']];
     const body = h('div', { class: 'tab-body' }, this.tabContent(this.tab));
     this.settingsEl.replaceChildren(h('div', { class: 'panel settings-panel' },
       h('div', { class: 'tabs' }, tabs.map(([id, label]) => h('button', {
@@ -202,6 +210,8 @@ export class UI {
       }, label)), h('button', { class: 'close', onclick: () => this.closeSettings() }, '✕')),
       body,
     ));
+    // Fitment edits are previewed live on the car, so dock the panel and keep the view clear.
+    this.settingsEl.classList.toggle('docked', this.tab === 'fitment');
     this.settingsEl.classList.remove('hidden');
   }
 
@@ -327,6 +337,24 @@ export class UI {
         });
         return [h('h3', {}, car.name), ...rows,
           h('button', { onclick: () => { settings.set(`tuning.${car.id}`, {}); this.showSettings(); } }, 'Reset tuning to stock')];
+      }
+      case 'fitment': {
+        const car = VEHICLES.find((v) => v.id === settings.data.car);
+        const fit = settings.data.fitment[car.id] || {};
+        const fmt = (p, v) => `${v > 0 && p.key !== 'rideHeight' && p.unit === '°' ? '+' : ''}${(+v).toFixed(1)} ${p.unit}`;
+        const rows = FITMENT_PARAMS.map((p) => {
+          const val = fit[p.key] ?? 0;
+          const out = h('span', { class: 'val' }, fmt(p, val));
+          const input = h('input', { type: 'range', min: p.min, max: p.max, step: p.step, value: val });
+          input.addEventListener('input', () => { out.textContent = fmt(p, input.value); settings.set(`fitment.${car.id}.${p.key}`, +input.value); });
+          return h('label', { class: 'field' }, h('span', {}, p.label), input, out);
+        });
+        const live = this.game.model?.def.id === car.id;
+        return [h('h3', {}, `${car.name} — fitment`), ...rows,
+          h('p', { class: 'hint' }, live
+            ? 'Changes show on the car right away and are saved for this car.'
+            : 'Saved for this car; start a drive with it to see the result.'),
+          h('button', { onclick: () => { settings.set(`fitment.${car.id}`, {}); this.showSettings(); } }, 'Reset fitment to stock')];
       }
     }
     return [];

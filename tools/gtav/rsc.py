@@ -280,3 +280,88 @@ def read_ymap_entities(data, names):
             continue
         out.append({'name': by_hash[int(a[i])], 'pos': pos, 'rot': rot, 'scale': (sxy, sxy, sz)})
     return out
+
+
+# ------------------------------------------------------------------ yft (fragment type)
+SEM_BLENDW, SEM_BLENDI = 1, 2
+
+
+def _quat_mat(q):
+    x, y, z, w = q
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]], np.float64)
+
+
+def read_skeleton(r, sk):
+    """Skeleton: bones @0x20, bone count @0x5E. Bone (0x50): rotation quat @0, translation @0x10, scale @0x20,
+    parent @0x32, name @0x38, tag @0x44. Returns [{name, parent, tag, local 4x4, world 4x4}] (world = model space)."""
+    bp = r.u('Q', sk, 0x20)[0]
+    n = r.u('H', sk, 0x5E)[0]
+    bones = []
+    for i in range(n):
+        o = i * 0x50
+        q = r.u('4f', bp, o)
+        t = r.u('3f', bp, o + 0x10)
+        s = r.u('3f', bp, o + 0x20)
+        parent = r.u('h', bp, o + 0x32)[0]
+        name = r.cstr(r.u('Q', bp, o + 0x38)[0])
+        tag = r.u('H', bp, o + 0x44)[0]
+        m = np.eye(4)
+        m[:3, :3] = _quat_mat(q) * np.array(s)
+        m[:3, 3] = t
+        world = bones[parent]['world'] @ m if 0 <= parent < i else m
+        bones.append({'name': name, 'parent': parent, 'tag': tag, 'local': m, 'world': world})
+    return bones
+
+
+def _read_geometry_full(r, gp):
+    """Like _read_geometry, plus normals, blend weights/indices and the geometry's bone id table (@0x68, count @0x72)."""
+    g = _read_geometry(r, gp)
+    vbp = r.u('Q', gp, 0x18)[0]
+    stride, _, _, dp1, vcount, _, dp2 = r.u('HHIQIIQ', vbp, 0x08)
+    declp = r.u('Q', vbp, 0x30)[0]
+    flags, _, _, _, types = r.u('IHBBQ', declp, 0)
+    raw = np.frombuffer(r.bytes(dp1 or dp2, stride * vcount), np.uint8).reshape(vcount, stride)
+    off = 0
+    for sem in range(16):
+        if not (flags >> sem) & 1:
+            continue
+        dt, n = _VTYPES[(types >> (sem * 4)) & 0xF]
+        sz = np.dtype(dt).itemsize * n
+        if sem in (SEM_NORMAL, SEM_BLENDW, SEM_BLENDI):
+            a = np.ascontiguousarray(raw[:, off:off + sz]).view(dt).reshape(vcount, n).astype(np.float32)
+            g[{SEM_NORMAL: 'normal', SEM_BLENDW: 'weights', SEM_BLENDI: 'joints'}[sem]] = a
+        off += sz
+    if 'normal' in g:
+        g['normal'] = g['normal'][:, :3]
+    bc = r.u('H', gp, 0x72)[0]
+    bidp = r.u('Q', gp, 0x68)[0]
+    g['bone_ids'] = list(r.u(f'{bc}H', bidp)) if bc and bidp else []
+    return g
+
+
+def read_yft(data):
+    """FragType: drawable @0x30, name @0x58. The FragDrawable is a DrawableBase (shader group @0x10,
+    skeleton @0x18, LOD model lists @0x50). Returns {name, bones, shaders, embedded, geometries} for the high LOD;
+    each geometry has pos/normal/uv/colour/idx/weights/joints/bone_ids, its shader index, and its model's
+    skinned flag and bone index (SkeletonBinding @0x28: skin byte 1, bone index byte 3)."""
+    r = Resource(data)
+    base = 0x50000000
+    name = r.cstr(r.u('Q', base, 0x58)[0])
+    dp = r.u('Q', base, 0x30)[0]
+    sgp, skp = r.u('QQ', dp, 0x10)
+    lods = r.u('4Q', dp, 0x50)
+    shaders, embedded = _read_shaders(r, sgp)
+    bones = read_skeleton(r, skp) if skp else []
+    geoms = []
+    for mp in r.ptr_list(lods[0], 0):
+        gps = r.ptr_list(mp, 0x08)
+        smp = r.u('Q', mp, 0x20)[0]
+        smap = r.u(f'{len(gps)}H', smp) if smp else [0] * len(gps)
+        sb = r.u('I', mp, 0x28)[0]
+        for gp, si in zip(gps, smap):
+            g = _read_geometry_full(r, gp)
+            g.update(shader=si, skinned=bool((sb >> 8) & 0xFF), bone=(sb >> 24) & 0xFF)
+            geoms.append(g)
+    return {'name': name, 'bones': bones, 'shaders': shaders, 'embedded': embedded, 'geometries': geoms}

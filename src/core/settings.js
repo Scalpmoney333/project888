@@ -18,6 +18,7 @@ export const DEFAULT_HUD_LAYOUT = {
   reset: { x: 70, y: 8, size: 48 },
   pause: { x: 96, y: 8, size: 48 },
   drone: { x: 77, y: 8, size: 48 },
+  lights: { x: 56, y: 8, size: 48 }, // night only
   // Drone-mode controls (only shown while flying the drone camera).
   droneStick: { x: 16, y: 70, size: 150 },
   droneUp: { x: 90, y: 56, size: 70 },
@@ -35,6 +36,9 @@ export const DEFAULTS = {
   spawn: {}, // per map id: spawn point id
   paint: {},
   tuning: {}, // per car id
+  fitment: {}, // per car id: wheel offset, camber, ride height (FITMENT_PARAMS)
+  timeOfDay: 'day', // 'morning' | 'day' | 'night'
+  headlights: false,
   driving: {
     steeringType: 'wheel', // 'wheel' | 'arrows'
     transmission: 'auto', // 'auto' | 'manual'
