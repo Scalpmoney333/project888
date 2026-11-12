@@ -6,6 +6,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { settings, resolveGraphics } from './settings.js';
+import { assetUrl } from './assets.js';
 import { CollisionWorld } from '../physics/CollisionWorld.js';
 import { Vehicle } from '../physics/Vehicle.js';
 import { getVehicle, buildSpec } from '../vehicle/specs.js';
@@ -204,7 +205,7 @@ export class Game {
       onProgress(0.7, 'Loading car…');
       const loader = new GLTFLoader();
       loader.setMeshoptDecoder(MeshoptDecoder);
-      const gltf = await loader.loadAsync(carDef.url, (e) => onProgress(0.7 + (e.total ? e.loaded / e.total : 0) * 0.25, 'Loading car…'));
+      const gltf = await loader.loadAsync(assetUrl(carDef.url), (e) => onProgress(0.7 + (e.total ? e.loaded / e.total : 0) * 0.25, 'Loading car…'));
       if (this.model) { this.scene.remove(this.model.root); this.model.dispose(); }
       this.model = new CarModel(gltf, carDef, quality);
       this.carDef = carDef;

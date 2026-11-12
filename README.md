@@ -15,6 +15,23 @@ Browser checks (need `npm run build && npm run preview` running, plus Chrome):
 `npm run test:ui` (menus, settings, manual gearbox buttons, HUD editor, persistence).
 Screenshots go to `test-output/`.
 
+## Single HTML file and Android APK
+
+```bash
+npm run build:single   # dist-single/touge-drift.html (~23 MB, everything embedded)
+npm run build:apk      # dist-single/touge-drift.apk (needs JDK 17 + Android SDK, see tools/build-apk.sh)
+```
+
+The HTML file has the code, both cars and the Nagao map embedded as base64 (decoded to Blob
+URLs on demand), so it opens straight from a phone's storage in Chrome with no server. The 4K
+Nagao atlas is left out to keep the size down; the 2K atlas is used instead.
+
+The APK is a fullscreen landscape WebView (`android/`) that loads the same HTML from its
+assets. The Android back button pauses the game. It is signed with a locally generated key
+(`android/debug.keystore`, not committed), so Android asks to allow installs from unknown
+sources. Rebuilding on another machine creates a new key, and Android won't install that APK
+over the old one until you uninstall the old one.
+
 ## Controls
 
 | Touch (landscape) | Keyboard | Gamepad |

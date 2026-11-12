@@ -5,17 +5,19 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { assetUrl, hasAsset } from '../core/assets.js';
 
 const BASE = 'assets/maps/nagao/';
 
 export async function loadNagao({ renderer, quality, onProgress }) {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
-  const texUrl = BASE + (quality === 'high' ? 'nagao_atlas_4k.jpg' : 'nagao_atlas_2k.jpg');
+  const hi = BASE + 'nagao_atlas_4k.jpg';
+  const texUrl = quality === 'high' && hasAsset(hi) ? hi : BASE + 'nagao_atlas_2k.jpg';
   const [gltf, texture, surfaceLut] = await Promise.all([
-    loader.loadAsync(BASE + 'nagao.glb', (e) => onProgress?.(e.total ? e.loaded / e.total : 0)),
-    new THREE.TextureLoader().loadAsync(BASE + texUrl.slice(BASE.length)),
-    fetch(BASE + 'nagao_surface.json').then((r) => r.json()),
+    loader.loadAsync(assetUrl(BASE + 'nagao.glb'), (e) => onProgress?.(e.total ? e.loaded / e.total : 0)),
+    new THREE.TextureLoader().loadAsync(assetUrl(texUrl)),
+    fetch(assetUrl(BASE + 'nagao_surface.json')).then((r) => r.json()),
   ]);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.flipY = false; // glTF UV convention

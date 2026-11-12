@@ -4,3 +4,6 @@ dist/
 *.log
 .DS_Store
 test-output/
+dist-single/
+android/build/
+android/debug.keystore
