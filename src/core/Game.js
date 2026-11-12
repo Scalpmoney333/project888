@@ -28,7 +28,7 @@ const _v = new THREE.Vector3();
 const _side = new THREE.Vector3();
 const DUST_BROWN = [0.48, 0.4, 0.3];
 const PARKED = { steer: 0, throttle: 0, brake: 0, handbrake: 1, clutch: 0 };
-const DRONE_IDLE = { forward: 0, right: 0, up: 0, fast: false };
+const DRONE_IDLE = { forward: 0, right: 0, up: 0, zoom: 0, fast: false };
 
 export class Game {
   constructor(canvas, uiRoot) {
@@ -102,6 +102,7 @@ export class Game {
       else this.cameraRig?.lookBy(-dx, dy);
     };
     this.input.onLookHeld = (held) => this.cameraRig?.setLookHeld(held);
+    this.input.onZoom = (d) => { if (this.drone?.active) settings.set('camera.droneFov', this.drone.setFov(settings.data.camera.droneFov + d)); };
 
     settings.onChange((path) => this.onSettings(path));
     addEventListener('resize', () => this.resize());
@@ -146,12 +147,45 @@ export class Game {
       this.sun.shadow.map = null;
     }
     this.renderer.shadowMap.type = g.preset === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
-    this.scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true)); });
+    // Recompiling every shader stalls for seconds on big maps; only shadow changes need it
+    // (environment changes are picked up by three.js automatically).
+    if (!prev || prev.shadows !== g.shadows || prev.preset !== g.preset) {
+      this.scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true)); });
+    }
     this.scene.environment = g.reflections ? this.envMap : null;
     if (prev.smoke !== g.smoke || !this.smoke) this.smoke.setQuality(g.smoke);
     if (!g.skidmarks) this.skids.clear();
+    this.applyViewDistance();
+    if (prev && prev.pixelRatio === g.pixelRatio && prev.maxDpr === g.maxDpr) return;
     this.dynamicScale = 1;
     this.resize();
+  }
+
+  /** Fog thickens to fully hide the scene at the view distance, so culled tiles never pop. */
+  applyViewDistance() {
+    if (!this.map) return;
+    const d = this.gfx.viewDistance;
+    this.scene.fog.density = Math.max(this.map.sky.fogDensity, 2.1 / d);
+    this.camera.far = Math.min(this.map.far, d * 1.15);
+    this.camera.updateProjectionMatrix();
+    this.sky.scale.setScalar(this.camera.far * 0.9);
+  }
+
+  /** Hide map tiles beyond the view distance (trees and grass sooner: they are the costliest). */
+  cullMap() {
+    const p = this.camera.position;
+    const d = this.gfx.viewDistance;
+    for (const c of this.map.cull) {
+      const dist = p.distanceTo(c.center) - c.radius;
+      c.mesh.visible = dist < (c.foliage ? d * 0.55 : d);
+    }
+  }
+
+  /** Upload every map texture and compile every shader up front instead of on first sight. */
+  prewarm() {
+    for (const m of this.map.meshes) if (m.material.map) this.renderer.initTexture(m.material.map);
+    for (const c of this.map.cull) c.mesh.visible = true;
+    this.renderer.compile(this.scene, this.camera);
   }
 
   onSettings(path) {
@@ -235,6 +269,10 @@ export class Game {
     this.applyDriving();
     this.resetCar();
     this.cameraRig.mode = settings.data.camera.mode;
+    this.applyViewDistance();
+    onProgress(0.97, 'Preparing graphics…');
+    await new Promise((r) => setTimeout(r, 0));
+    this.prewarm();
     onProgress(1, 'Ready');
     this.emit('session', { car: carDef, map: mapDef });
   }
@@ -303,7 +341,10 @@ export class Game {
       if (!this.paused) this.simulate(dt);
       this.updateVisuals(dt);
     }
-    if (this.map) this.renderer.render(this.scene, this.camera);
+    if (this.map) {
+      this.cullMap();
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   simulate(dt) {
@@ -462,8 +503,11 @@ export class Game {
     this.fps = 1 / avg;
     if (!this.gfx.adaptive || this.paused) return;
     let next = this.dynamicScale;
+    // Each change reallocates the canvas (a visible hitch), so step up only after several good
+    // windows in a row instead of bouncing up and down.
+    this.goodWindows = this.fps > 50 ? (this.goodWindows || 0) + 1 : 0;
     if (this.fps < 27) next = Math.max(0.55, this.dynamicScale - 0.1);
-    else if (this.fps > 50 && this.dynamicScale < 1) next = Math.min(1, this.dynamicScale + 0.05);
+    else if (this.goodWindows >= 4 && this.dynamicScale < 1) { next = Math.min(1, this.dynamicScale + 0.05); this.goodWindows = 0; }
     if (next !== this.dynamicScale) {
       this.dynamicScale = next;
       this.resize();

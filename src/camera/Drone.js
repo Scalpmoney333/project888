@@ -2,6 +2,7 @@
 // flies level); altitude is separate. Speed eases in and out so it feels like a real drone.
 
 import * as THREE from 'three';
+import { settings } from '../core/settings.js';
 
 const _f = new THREE.Vector3();
 const _r = new THREE.Vector3();
@@ -40,10 +41,22 @@ export class DroneCamera {
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + dy));
   }
 
+  /** Field of view in degrees (saved in settings), changed with the FOV buttons / wheel. */
+  setFov(deg) {
+    const fov = Math.max(30, Math.min(110, Math.round(deg)));
+    settings.data.camera.droneFov = fov;
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
+    return fov;
+  }
+
   /**
-   * @param {object} c  {forward, right, up} each in -1..1, fast (boolean)
+   * @param {object} c  {forward, right, up, zoom} each in -1..1, fast (boolean)
    */
   update(dt, c) {
+    if (c.zoom) this.zooming = this.setFov(settings.data.camera.droneFov + c.zoom * 35 * dt);
+    else if (this.zooming) { settings.set('camera.droneFov', settings.data.camera.droneFov); this.zooming = 0; }
+    if (this.camera.fov !== settings.data.camera.droneFov) this.setFov(settings.data.camera.droneFov);
     const max = c.fast ? 45 : 16; // m/s
     _f.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     _r.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));

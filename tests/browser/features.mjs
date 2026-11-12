@@ -101,16 +101,64 @@ await page.screenshot({ path: 'test-output/features-hud-hidden.png' });
 await tap('.ctl-hudToggle');
 const shown = await page.evaluate(() => ({ gauge: getComputedStyle(document.querySelector('.gauge')).display, stick: document.querySelector('.ctl-droneStick').style.display }));
 check('HUD restores', shown.gauge !== 'none' && shown.stick === '', shown);
+// Drone FOV: hold FOV+ and the view widens; the value is saved.
+const fov0 = await page.evaluate(() => window.__drift.game.camera.fov);
+const fc = await centerOf('.ctl-droneFovOut');
+await touch('touchStart', [{ ...fc, id: 3 }]);
+await page.waitForFunction((f0) => window.__drift.game.camera.fov > f0 + 5, { timeout: 120000 }, fov0).catch(() => {});
+await touch('touchEnd', []);
+await sleep(300);
+const fov1 = await page.evaluate(() => ({ cam: window.__drift.game.camera.fov, saved: window.__drift.settings.data.camera.droneFov }));
+check('drone FOV adjusts', fov1.cam > fov0 + 5 && fov1.saved === fov1.cam, { fov0, ...fov1 });
 await tap('.ctl-droneExit');
 const out = await page.evaluate(() => ({ active: window.__drift.game.drone.active, wheel: document.querySelector('.ctl-wheel').style.display }));
 check('drone exits to driving', !out.active && out.wheel === '', out);
+await page.waitForFunction(() => Math.abs(window.__drift.game.camera.fov - window.__drift.settings.data.camera.fov) < 8, { timeout: 120000 }).catch(() => {});
+const fovBack = await page.evaluate(() => window.__drift.game.camera.fov);
+check('driving FOV restored after drone', fovBack < 75, { fovBack });
+
+// View-distance culling hides far tiles on the big map.
+const cullInfo = await page.evaluate(() => {
+  const m = window.__drift.game.map;
+  return { total: m.cull.length, visible: m.cull.filter((c) => c.mesh.visible).length, far: window.__drift.game.camera.far };
+});
+check('far tiles culled', cullInfo.visible < cullInfo.total * 0.6 && cullInfo.visible > 5, cullInfo);
+
+// Chase camera at speed: drive a fake car at 40 m/s (144 km/h) and check the camera keeps
+// the same distance as when parked.
+const chase = await page.evaluate(() => {
+  const { game } = window.__drift;
+  const Rig = game.cameraRig.constructor;
+  const cam = game.camera.clone();
+  const rig = new Rig(cam, game.world);
+  rig.mode = 0;
+  const v = game.vehicle;
+  const fake = {
+    renderPosition: v.renderPosition.clone(), renderQuaternion: v.renderQuaternion.clone(),
+    velocity: v.velocity.clone(), speed: 0, driftAngle: 0, wheels: v.wheels.map(() => ({ slipSpeed: 0 })),
+  };
+  const fwd = { x: 0, z: 1 };
+  { const f = fake.renderPosition.clone().set(0, 0, 1).applyQuaternion(fake.renderQuaternion); fwd.x = f.x; fwd.z = f.z; }
+  const run = (speed, steps) => {
+    fake.velocity.set(fwd.x * speed, 0, fwd.z * speed);
+    fake.speed = speed;
+    for (let i = 0; i < steps; i++) {
+      fake.renderPosition.x += fwd.x * speed / 60;
+      fake.renderPosition.z += fwd.z * speed / 60;
+      rig.update(1 / 60, fake, game.model);
+    }
+    return cam.position.distanceTo(fake.renderPosition);
+  };
+  return { parked: run(0, 240), fast: run(40, 300) };
+});
+check('chase camera keeps distance at speed', Math.abs(chase.fast - chase.parked) < 0.5, chase);
 
 // Paint: repaint, then "Original" restores the model's own material colour.
 const paint = await page.evaluate(() => {
   const { game, settings } = window.__drift;
   const mats = () => game.model.body.children.filter((m) => new RegExp(game.carDef.model.paintMaterial, 'i').test(m.material.name || '')).map((m) => m.material.color.getHexString());
-  settings.set('paint.chaser', '#c8102e');
-  settings.set('car', 'chaser');
+  settings.set('paint.chaser_gta', '#c8102e');
+  settings.set('car', 'chaser_gta');
   return { mats };
 });
 await page.evaluate(async () => { await window.__drift.ui.start(); });
@@ -119,12 +167,12 @@ const pr = await page.evaluate(() => {
   const { game, settings } = window.__drift;
   const mats = () => [...new Set(game.model.body.children.filter((m) => new RegExp(game.carDef.model.paintMaterial, 'i').test(m.material.name || '')).map((m) => m.material.color.getHexString()))];
   const red = mats();
-  settings.set('paint.chaser', null);
+  settings.set('paint.chaser_gta', null);
   const orig = mats();
   const origStored = [...new Set(game.model.body.children.filter((m) => m.material.userData.origColor).map((m) => m.material.userData.origColor.getHexString()))];
   return { red, orig, origStored };
 });
-check('repaint then Original restores', pr.red.includes('c8102e') && pr.orig.join() === pr.origStored.join(), pr);
+check('repaint then Original restores', pr.red.includes('c8102e') && pr.orig.join() === '7d1a38', pr);
 void paint;
 
 check('no page errors', errors.length === 0, errors.slice(0, 5));

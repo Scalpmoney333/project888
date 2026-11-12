@@ -8,7 +8,7 @@ import fs from 'node:fs';
 
 const base = process.argv[2] || 'http://localhost:4173/';
 const only = process.env.MAPS ? process.env.MAPS.split(',') : ['nagao', 'tsukuba', 'shomaru', 'nagao_gta', 'tsukuba_gta'];
-const cars = process.env.CARS ? process.env.CARS.split(',') : ['skyline', 'chaser', 'markii', 's15', 's13', 'markii_gta'];
+const cars = process.env.CARS ? process.env.CARS.split(',') : ['skyline', 's15', 's13', 'markii_gta', 'chaser_gta', 's15_gta'];
 // Every map once (cars rotated), then any car not yet covered on the first map.
 const pairs = only.map((m, i) => [m, cars[i % cars.length]]);
 for (const c of cars) if (!pairs.some((p) => p[1] === c)) pairs.push([only[0], c]);
